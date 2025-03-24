@@ -21,14 +21,14 @@ mod tests {
         let mut files = SourceFilesMap::<u8>::new();
 
         // Add files
-        files.add_file("src/main.rs".into());
-        files.add_file("src/lib.rs".into());
-
+        files.add_file("src/sfp.rs".into(), include_bytes!("sfp.rs").to_vec());
+        let abs_file_id = "src/fid.rs";
+        files.add_file(abs_file_id.into(), include_bytes!("fid.rs").to_vec());
         // Finalize to assign IDs
         files.finalize()?;
 
         // Get a file ID
-        let file_id = files.get_id("src/main.rs").unwrap();
+        let file_id = files.get_id(abs_file_id).unwrap();
 
         // Create an absolute position
         let abs_pos = create_absolute_position(file_id, 10, 5, 12, 20);
