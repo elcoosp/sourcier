@@ -1,7 +1,7 @@
+use crate::SourceFilePosition;
+use crate::fid::FileId;
 use std::collections::HashMap;
 use std::convert::TryInto;
-
-use crate::fid::FileId;
 
 #[cfg(feature = "rt-feedback")]
 use std::sync::{Arc, Mutex};
@@ -13,6 +13,9 @@ pub struct SourceFilesMap<Id: FileId> {
     avg_file_size: usize,
     expected_files: usize,
 
+    // Feature-gated view state
+    #[cfg(feature = "view")]
+    line_offsets: HashMap<Id, Vec<usize>>,
     // Feature-gated feedback state
     #[cfg(feature = "rt-feedback")]
     feedback: Option<Arc<Mutex<RuntimeFeedback>>>,
@@ -45,7 +48,19 @@ impl<Id: FileId> SourceFilesMap<Id> {
             path_to_id: HashMap::with_capacity(DEFAULT_FILE_COUNT),
             avg_file_size: DEFAULT_AVG_SIZE,
             expected_files: DEFAULT_FILE_COUNT,
+            #[cfg(feature = "view")]
+            line_offsets: HashMap::with_capacity(DEFAULT_FILE_COUNT),
         }
+    }
+    #[cfg(feature = "view")]
+    fn compute_line_offsets(content: &[u8]) -> Vec<usize> {
+        let mut offsets = vec![0];
+        for (i, &b) in content.iter().enumerate() {
+            if b == b'\n' {
+                offsets.push(i + 1);
+            }
+        }
+        offsets
     }
     /// Create new instance with optional feedback context
     #[cfg(feature = "rt-feedback")]
@@ -140,9 +155,60 @@ impl<Id: FileId> SourceFilesMap<Id> {
             data.max_file_size = max_size;
             data.usage_count += 1;
         }
+        #[cfg(feature = "view")]
+        {
+            for (idx, entry) in self.files.iter().enumerate() {
+                let raw_id = (idx + 1) as u64;
+                let id = Id::try_from(raw_id).map_err(|_| "ID conversion failed")?;
+                let offsets = Self::compute_line_offsets(&entry.content);
+                self.line_offsets.insert(id, offsets);
+            }
+        }
         Ok(())
     }
+    #[cfg(feature = "view")]
+    pub fn view(&self, id: Id, pos: &impl SourceFilePosition) -> Option<&[u8]> {
+        let content = self.get_content(id)?;
+        let line_offsets = self.line_offsets.get(&id)?;
 
+        let start_line = pos.start_line() as usize;
+        let start_col = pos.start_column() as usize;
+        let end_line = pos.end_line() as usize;
+        let end_col = pos.end_column() as usize;
+
+        if start_line == 0 || end_line == 0 || start_line > end_line {
+            return None;
+        }
+
+        let start_line_index = start_line - 1;
+        let end_line_index = end_line - 1;
+
+        // Calculate start byte
+        let line_start = *line_offsets.get(start_line_index)?;
+        let line_end = if start_line_index + 1 < line_offsets.len() {
+            line_offsets[start_line_index + 1] - 1
+        } else {
+            content.len()
+        };
+        let start_byte = line_start + start_col.saturating_sub(1);
+        let start_byte = start_byte.min(line_end);
+
+        // Calculate end byte
+        let end_line_start = *line_offsets.get(end_line_index)?;
+        let end_line_end = if end_line_index + 1 < line_offsets.len() {
+            line_offsets[end_line_index + 1] - 1
+        } else {
+            content.len()
+        };
+        let end_byte = end_line_start + end_col;
+        let end_byte = end_byte.min(end_line_end);
+
+        if start_byte > end_byte || end_byte > content.len() {
+            return None;
+        }
+
+        Some(&content[start_byte..end_byte])
+    }
     /// Get immutable view of file content
     pub fn get_content(&self, id: Id) -> Option<&[u8]> {
         let raw_id: u64 = id.into();
