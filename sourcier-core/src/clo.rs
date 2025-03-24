@@ -31,9 +31,9 @@ impl CompactLineOffsets {
             return None;
         }
 
-        let start = self.offsets[(line - 1) as usize] as usize;
+        let start = self.offsets[line - 1] as usize;
         let end = if line < self.offsets.len() {
-            self.offsets[line as usize] as usize - 1
+            self.offsets[line] as usize - 1
         } else {
             self.content_length
         };

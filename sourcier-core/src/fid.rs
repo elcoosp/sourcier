@@ -80,11 +80,7 @@ impl<Id: FileId> AbsolutePosition<Id> {
     pub fn new(file_id: Id, start_line: u16, start_col: u8, end_line: u16, end_col: u8) -> Self {
         let file_id_u64: u64 = file_id.into();
 
-        let encoded = file_id_u64 << Id::FILE_ID_SHIFT
-            | (start_line as u64) << Id::START_LINE_SHIFT
-            | (start_col as u64) << Id::START_COL_SHIFT
-            | (end_line as u64) << Id::END_LINE_SHIFT
-            | (end_col as u64) << Id::END_COL_SHIFT;
+        let encoded = (file_id_u64 << Id::FILE_ID_SHIFT) | ((start_line as u64) << Id::START_LINE_SHIFT) | ((start_col as u64) << Id::START_COL_SHIFT) | ((end_line as u64) << Id::END_LINE_SHIFT) | ((end_col as u64) << Id::END_COL_SHIFT);
 
         Self(encoded, PhantomData)
     }
@@ -138,9 +134,7 @@ impl RelativePosition {
 
     /// Create a new relative position
     pub fn new(start_line: u16, start_col: u8, end_line: u16, end_col: u8) -> Self {
-        let encoded = (start_line as u64) << Self::START_LINE_SHIFT
-            | (start_col as u64) << Self::START_COL_SHIFT
-            | (end_line as u64) << Self::END_LINE_SHIFT
+        let encoded = ((start_line as u64) << Self::START_LINE_SHIFT) | ((start_col as u64) << Self::START_COL_SHIFT) | ((end_line as u64) << Self::END_LINE_SHIFT)
             | end_col as u64;
 
         Self(encoded)

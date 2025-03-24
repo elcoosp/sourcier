@@ -36,6 +36,12 @@ struct FileEntry {
     path: String,
     content: Vec<u8>,
 }
+impl<Id: FileId> Default for SourceFilesMap<Id> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<Id: FileId> SourceFilesMap<Id> {
     const DEFAULT_FILE_COUNT: usize = 100;
     const DEFAULT_AVG_SIZE: usize = 2048;
