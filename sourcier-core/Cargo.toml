@@ -5,7 +5,7 @@ edition = "2024"
 
 [features]
 rt-feedback = []
-view = []
+view = ["dep:memchr"]
 default = ["view", "rt-feedback"]
 [dependencies]
-memchr.workspace = true
+memchr = { workspace = true, optional = true }
