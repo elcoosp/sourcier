@@ -8,3 +8,4 @@ rt-feedback = []
 view = []
 default = ["view"]
 [dependencies]
+memchr.workspace = true

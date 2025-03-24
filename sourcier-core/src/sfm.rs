@@ -1,4 +1,5 @@
 use crate::SourceFilePosition;
+use crate::clo::CompactLineOffsets;
 use crate::fid::FileId;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -15,7 +16,7 @@ pub struct SourceFilesMap<Id: FileId> {
 
     // Feature-gated view state
     #[cfg(feature = "view")]
-    line_offsets: HashMap<Id, Vec<usize>>,
+    line_offsets: HashMap<Id, CompactLineOffsets>,
     // Feature-gated feedback state
     #[cfg(feature = "rt-feedback")]
     feedback: Option<Arc<Mutex<RuntimeFeedback>>>,
@@ -53,14 +54,8 @@ impl<Id: FileId> SourceFilesMap<Id> {
         }
     }
     #[cfg(feature = "view")]
-    fn compute_line_offsets(content: &[u8]) -> Vec<usize> {
-        let mut offsets = vec![0];
-        for (i, &b) in content.iter().enumerate() {
-            if b == b'\n' {
-                offsets.push(i + 1);
-            }
-        }
-        offsets
+    fn compute_line_offsets(content: &[u8]) -> CompactLineOffsets {
+        CompactLineOffsets::compute(content)
     }
     /// Create new instance with optional feedback context
     #[cfg(feature = "rt-feedback")]
@@ -176,34 +171,20 @@ impl<Id: FileId> SourceFilesMap<Id> {
         let end_line = pos.end_line() as usize;
         let end_col = pos.end_column() as usize;
 
+        // Early validation
         if start_line == 0 || end_line == 0 || start_line > end_line {
             return None;
         }
 
-        let start_line_index = start_line - 1;
-        let end_line_index = end_line - 1;
+        // Compute line ranges more efficiently
+        let start_range = line_offsets.get_line_range(start_line)?;
+        let end_range = line_offsets.get_line_range(end_line)?;
 
-        // Calculate start byte
-        let line_start = *line_offsets.get(start_line_index)?;
-        let line_end = if start_line_index + 1 < line_offsets.len() {
-            line_offsets[start_line_index + 1] - 1
-        } else {
-            content.len()
-        };
-        let start_byte = line_start + start_col.saturating_sub(1);
-        let start_byte = start_byte.min(line_end);
+        let start_byte = start_range.0 + start_col.saturating_sub(1);
+        let end_byte = end_range.0 + end_col;
 
-        // Calculate end byte
-        let end_line_start = *line_offsets.get(end_line_index)?;
-        let end_line_end = if end_line_index + 1 < line_offsets.len() {
-            line_offsets[end_line_index + 1] - 1
-        } else {
-            content.len()
-        };
-        let end_byte = end_line_start + end_col;
-        let end_byte = end_byte.min(end_line_end);
-
-        if start_byte > end_byte || end_byte > content.len() {
+        // Bounds checking
+        if start_byte >= content.len() || end_byte > content.len() || start_byte > end_byte {
             return None;
         }
 
