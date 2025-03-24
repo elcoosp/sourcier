@@ -3,13 +3,28 @@ use std::convert::TryInto;
 
 use crate::fid::FileId;
 
-/// Manages mapping between file paths and their deterministic IDs
+#[cfg(feature = "rt-feedback")]
+use std::sync::{Arc, Mutex};
+
 #[derive(Debug, Clone)]
 pub struct SourceFilesMap<Id: FileId> {
     files: Vec<FileEntry>,
     path_to_id: HashMap<String, Id>,
     avg_file_size: usize,
     expected_files: usize,
+
+    // Feature-gated feedback state
+    #[cfg(feature = "rt-feedback")]
+    feedback: Option<Arc<Mutex<RuntimeFeedback>>>,
+}
+
+#[cfg(feature = "rt-feedback")]
+#[derive(Debug, Default)]
+pub struct RuntimeFeedback {
+    pub total_files: usize,
+    pub total_bytes: u64,
+    pub max_file_size: usize,
+    pub usage_count: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -19,6 +34,7 @@ struct FileEntry {
 }
 impl<Id: FileId> SourceFilesMap<Id> {
     /// Create a new map with conservative defaults for small projects
+    #[cfg(not(feature = "rt-feedback"))]
     pub fn new() -> Self {
         // Default heuristics: 100 files @ 2KB average
         const DEFAULT_FILE_COUNT: usize = 100;
@@ -31,13 +47,29 @@ impl<Id: FileId> SourceFilesMap<Id> {
             expected_files: DEFAULT_FILE_COUNT,
         }
     }
-    /// Create with custom preallocation heuristics
-    pub fn with_heuristics(expected_files: usize, avg_file_size: usize) -> Self {
+    /// Create new instance with optional feedback context
+    #[cfg(feature = "rt-feedback")]
+    pub fn with_feedback(feedback: Option<Arc<Mutex<RuntimeFeedback>>>) -> Self {
+        let (expected, avg_size) = feedback.as_ref().map_or_else(
+            || (Self::DEFAULT_FILE_COUNT, Self::DEFAULT_AVG_SIZE), // Defaults
+            |f| {
+                let data = f.lock().unwrap();
+                let expected = (data.total_files * 120) / 100; // 20% buffer
+                let avg_size = if data.total_files > 0 {
+                    (data.total_bytes / data.total_files as u64) as usize
+                } else {
+                    Self::DEFAULT_AVG_SIZE
+                };
+                (expected, avg_size)
+            },
+        );
+
         Self {
-            files: Vec::with_capacity(expected_files),
-            path_to_id: HashMap::with_capacity(expected_files),
-            avg_file_size,
-            expected_files,
+            files: Vec::with_capacity(expected),
+            path_to_id: HashMap::with_capacity(expected),
+            avg_file_size: avg_size,
+            expected_files: expected,
+            feedback,
         }
     }
 
@@ -91,7 +123,23 @@ impl<Id: FileId> SourceFilesMap<Id> {
             entry.content = consolidated[offset..offset + len].to_vec();
             offset += len;
         }
+        #[cfg(feature = "rt-feedback")]
+        if let Some(feedback) = &self.feedback {
+            let total_bytes = self.files.iter().map(|e| e.content.len() as u64).sum();
 
+            let max_size = self
+                .files
+                .iter()
+                .map(|e| e.content.len())
+                .max()
+                .unwrap_or(0);
+
+            let mut data = feedback.lock().unwrap();
+            data.total_files = self.files.len();
+            data.total_bytes = total_bytes;
+            data.max_file_size = max_size;
+            data.usage_count += 1;
+        }
         Ok(())
     }
 
