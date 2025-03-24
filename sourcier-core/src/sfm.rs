@@ -37,20 +37,20 @@ struct FileEntry {
     content: Vec<u8>,
 }
 impl<Id: FileId> SourceFilesMap<Id> {
+    const DEFAULT_FILE_COUNT: usize = 100;
+    const DEFAULT_AVG_SIZE: usize = 2048;
     /// Create a new map with conservative defaults for small projects
-    #[cfg(not(feature = "rt-feedback"))]
     pub fn new() -> Self {
         // Default heuristics: 100 files @ 2KB average
-        const DEFAULT_FILE_COUNT: usize = 100;
-        const DEFAULT_AVG_SIZE: usize = 2048;
 
         Self {
-            files: Vec::with_capacity(DEFAULT_FILE_COUNT),
-            path_to_id: HashMap::with_capacity(DEFAULT_FILE_COUNT),
-            avg_file_size: DEFAULT_AVG_SIZE,
-            expected_files: DEFAULT_FILE_COUNT,
+            files: Vec::with_capacity(Self::DEFAULT_FILE_COUNT),
+            path_to_id: HashMap::with_capacity(Self::DEFAULT_FILE_COUNT),
+            avg_file_size: Self::DEFAULT_AVG_SIZE,
+            expected_files: Self::DEFAULT_FILE_COUNT,
             #[cfg(feature = "view")]
-            line_offsets: HashMap::with_capacity(DEFAULT_FILE_COUNT),
+            line_offsets: HashMap::with_capacity(Self::DEFAULT_FILE_COUNT),
+            feedback: None,
         }
     }
     #[cfg(feature = "view")]
@@ -78,6 +78,7 @@ impl<Id: FileId> SourceFilesMap<Id> {
             files: Vec::with_capacity(expected),
             path_to_id: HashMap::with_capacity(expected),
             avg_file_size: avg_size,
+            line_offsets: HashMap::with_capacity(expected),
             expected_files: expected,
             feedback,
         }
