@@ -1,5 +1,6 @@
 mod tests;
 // Public modules
+pub mod clo;
 pub mod fid;
 pub mod sfm;
 pub mod sfp;
