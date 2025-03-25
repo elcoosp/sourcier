@@ -1,4 +1,4 @@
-# Source File Mapping (SFM) Library
+# Source File Mapping Library
 
 ⚠️ **WARNING**: This library is a Work in Progress (WIP) and is not production-ready. Expect breaking changes and API instability.
 
@@ -29,7 +29,7 @@ A Rust library for compact and efficient source file mapping and position tracki
 ## Usage Example
 
 ```rust
-use sfm::{SourceFilesMap, create_absolute_position};
+use sourcier::sfm::{SourceFilesMap, create_absolute_position};
 
 // Create a file map with u8 file IDs
 let mut files = SourceFilesMap::<u8>::new();
@@ -81,7 +81,7 @@ To use this library, you'll need to reference it directly from the GitHub reposi
 
 ```toml
 [dependencies]
-sfm = { git = "https://github.com/your-username/sfm", branch = "main" }
+sourcier = { git = "https://github.com/elcoosp/sourcier", branch = "main" }
 ```
 
 ⚠️ Warning: This is a work-in-progress library and is not recommended for production use. Expect frequent breaking changes.
