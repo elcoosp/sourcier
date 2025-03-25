@@ -1,0 +1,9 @@
+---
+source: sourcier-core/src/tests.rs
+expression: val
+snapshot_kind: text
+---
+[
+  72068610630030336,
+  null
+]

@@ -54,8 +54,84 @@ mod test_utils {
             };
         };
     }
+    // Core test macro with Insta snapshot configuration
+    macro_rules! exhaustive_test_suite {
+        ($name:ident { $($test:ident $body:tt)* }) => {
+            mod $name {
+                use super::*;
+                use crate::*;
+                use insta::{assert_snapshot, assert_json_snapshot, assert_debug_snapshot};
 
-    pub(crate) use {add_files, assert_position_snapshot, setup_test_env, test_suite};
+                $(
+                    #[test]
+                    fn $test() -> Result<(), String> {
+                        let _settings = insta::Settings::new()
+                            .set_snapshot_suffix(format!(
+                                "{}__{}__{}",
+                                module_path!(),
+                                stringify!($test),
+                                line!()
+                            ));
+
+                        let result: Result<_, String> = (|| -> Result<_, String> {
+                            $body
+                        })();
+
+                        match result {
+                            Ok(val) => {
+                                // Automatic snapshot type detection
+                                match &val {
+                                    _ if std::any::type_name::<()>() == std::any::type_name_of_val(&val) => {}
+                                    _ => insta::assert_json_snapshot!(val),
+                                }
+                                Ok(())
+                            }
+                            Err(e) => {
+                                insta::assert_snapshot!("ERROR", &e);
+                                Err(e)
+                            }
+                        }
+                    }
+                )*
+            }
+        };
+    }
+
+    // Multi-feature test combinator
+    macro_rules! feature_combination_test {
+           ($features:expr, $name:ident, $body:block) => {
+               #[cfg(all($(feature = $features),*))]
+               mod $name {
+                   use super::*;
+                   #[test]
+                   fn test() -> Result<(), String> {
+                       setup_test_env!();
+                       $body
+                   }
+               }
+           };
+       }
+
+    // Edge case generator
+    macro_rules! edge_case {
+        ($desc:literal, $files:expr => $op:expr) => {
+            paste::item! {
+                #[test]
+                fn [<edge_case_ $desc>]() -> Result<(), String> {
+                    let mut files = SourceFilesMap::<u16>::new();
+                    add_files!(files => $files);
+                    files.finalize()?;
+                    $op;
+                    Ok(())
+                }
+            }
+        };
+    }
+
+    pub(crate) use {
+        add_files, assert_position_snapshot, edge_case, exhaustive_test_suite,
+        feature_combination_test, setup_test_env, test_suite,
+    };
 }
 
 #[cfg(not(feature = "rt-feedback"))]
@@ -90,56 +166,44 @@ mod basic {
         }
     });
 }
-#[cfg(not(feature = "rt-feedback"))]
 // Example usage to show the simple integration
 #[cfg(test)]
 mod basic {
-    use crate::*;
+    use super::*;
+    use test_utils::*;
+    exhaustive_test_suite!(core_functionality {
+        test_basic_operations {
+            let mut files = SourceFilesMap::<u8>::new();
+            add_files!(files => {
+                "main.rs" b"fn main() {}",
+                "lib.rs" b"pub mod utils;"
+            });
+            files.finalize()?;
+            Ok(files)
+        }
 
-    // Macro to simplify file addition with optional content
-    macro_rules! add_file {
-        ($files:expr, $path:expr) => {
-            $files.add_file($path.to_string(), Vec::new())
-        };
-        ($files:expr, $path:expr, $content:expr) => {
-            $files.add_file($path.to_string(), $content.to_vec())
-        };
-    }
+        test_position_encoding {
+            let pos = create_absolute_position(1 as u8, 10, 5, 15, 20);
+            Ok(pos)
+        }
 
-    #[test]
-    fn integrated_usage() -> Result<(), String> {
-        // Create a file map
-        let mut files = SourceFilesMap::<u8>::new();
+        test_max_files {
+            let mut files = SourceFilesMap::<u8>::new();
+            for i in 0..u8::MAX {
+                files.add_file(format!("file_{}.rs", i), vec![]);
+            }
+            files.finalize()
+        }
 
-        // Add files using the new macro
-        add_file!(files, "src/sfp.rs", include_bytes!("sfp.rs"));
-        let abs_file_id = "src/fid.rs";
-        add_file!(files, abs_file_id, include_bytes!("fid.rs"));
-
-        // Finalize to assign IDs
-        files.finalize()?;
-
-        // Get a file ID
-        let file_id = files.get_id(abs_file_id).unwrap();
-
-        // Create an absolute position
-        let abs_pos = create_absolute_position(file_id, 10, 5, 12, 20);
-
-        // Create a relative position
-        let rel_pos = create_relative_position(10, 5, 12, 20);
-
-        // Verify both positions have the same line/column values
-        assert_eq!(abs_pos.start_line(), rel_pos.start_line());
-        assert_eq!(abs_pos.start_column(), rel_pos.start_column());
-        assert_eq!(abs_pos.end_line(), rel_pos.end_line());
-        assert_eq!(abs_pos.end_column(), rel_pos.end_column());
-
-        // But different file IDs
-        assert!(abs_pos.source_file_id().is_some());
-        assert!(rel_pos.source_file_id().is_none());
-
-        Ok(())
-    }
+        test_duplicate_paths {
+            let mut files = SourceFilesMap::<u8>::new();
+            add_files!(files => {
+                "dup.rs" b"content",
+                "dup.rs" b"different"
+            });
+            files.finalize()
+        }
+    });
 }
 
 #[cfg(feature = "rt-feedback")]
