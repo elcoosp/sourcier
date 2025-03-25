@@ -51,9 +51,6 @@ mod test_utils {
             let _guard = {
                 #[cfg(feature = "rt-feedback")]
                 let feedback = crate::RuntimeFeedback::default();
-
-                // Reset global state if needed
-                crate::test_utils::TestEnvGuard::new()
             };
         };
     }
@@ -257,27 +254,21 @@ mod rt_feedback {
 #[cfg(feature = "view")]
 #[cfg(test)]
 mod view {
+    use super::*;
     use crate::*;
+    use test_utils::*;
+    test_suite!(view_tests {
+        test_multi_line_view {
+            let mut files = SourceFilesMap::<u8>::new();
+            add_files!(files => {
+                "multiline.txt" b"First\nSecond\nThird"
+            });
+            files.finalize()?;
 
-    #[test]
-    fn simple() -> Result<(), String> {
-        let mut files = SourceFilesMap::<u8>::new();
-        files.add_file("test.txt".to_string(), b"Hello\nWorld\nRust".to_vec());
-        files.finalize()?;
-
-        let file_id = files.get_id("test.txt").unwrap();
-        let pos = create_relative_position(1, 1, 1, 5);
-        let slice = files.view(file_id, &pos).unwrap();
-        assert_eq!(slice, b"Hello");
-
-        let pos = create_relative_position(2, 1, 2, 5);
-        let slice = files.view(file_id, &pos).unwrap();
-        assert_eq!(slice, b"World");
-
-        let pos = create_relative_position(3, 1, 3, 4);
-        let slice = files.view(file_id, &pos).unwrap();
-        assert_eq!(slice, b"Rust");
-
-        Ok(())
-    }
+            let file_id = files.get_id("multiline.txt").unwrap();
+            let pos = create_relative_position(1, 1, 3, 5);
+            let content =unsafe{ std::str::from_utf8_unchecked(files.view(file_id, &pos).unwrap())};
+            insta::assert_debug_snapshot!(content);
+        }
+    });
 }
