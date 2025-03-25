@@ -60,7 +60,6 @@ mod test_utils {
             mod $name {
                 use super::*;
                 use crate::*;
-                use insta::{assert_snapshot, assert_json_snapshot, assert_debug_snapshot};
 
                 $(
                     #[test]
@@ -82,7 +81,9 @@ mod test_utils {
                                 // Automatic snapshot type detection
                                 match &val {
                                     _ if std::any::type_name::<()>() == std::any::type_name_of_val(&val) => {}
-                                    _ => insta::assert_json_snapshot!(val),
+                                    _ => insta::assert_yaml_snapshot!(val, {
+                                        ".path_to_id"=> insta::sorted_redaction()
+                                    }),
                                 }
                                 Ok(())
                             }
