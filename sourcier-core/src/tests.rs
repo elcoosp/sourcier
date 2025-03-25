@@ -1,4 +1,3 @@
-#[cfg(test)]
 mod test_utils {
     // Macro for declarative test setup
     macro_rules! test_suite {
@@ -82,7 +81,7 @@ mod test_utils {
                                 match &val {
                                     _ if std::any::type_name::<()>() == std::any::type_name_of_val(&val) => {}
                                     _ => insta::assert_yaml_snapshot!(val, {
-                                        ".path_to_id"=> insta::sorted_redaction()
+                                        ".path_to_id"=> insta::sorted_redaction(),
                                     }),
                                 }
                                 Ok(())
@@ -100,37 +99,23 @@ mod test_utils {
 
     // Multi-feature test combinator
     macro_rules! feature_combination_test {
-           ($features:expr, $name:ident, $body:block) => {
-               #[cfg(all($(feature = $features),*))]
-               mod $name {
-                   use super::*;
-                   #[test]
-                   fn test() -> Result<(), String> {
-                       setup_test_env!();
-                       $body
-                   }
-               }
-           };
-       }
-
-    // Edge case generator
-    macro_rules! edge_case {
-        ($desc:literal, $files:expr => $op:expr) => {
-            paste::item! {
+        ($($feature:literal),*, $name:ident, $body:block) => {
+            #[cfg(all($(feature = $feature),*))]
+            mod $name {
+                use super::*;
                 #[test]
-                fn [<edge_case_ $desc>]() -> Result<(), String> {
-                    let mut files = SourceFilesMap::<u16>::new();
-                    add_files!(files => $files);
-                    files.finalize()?;
-                    $op;
-                    Ok(())
+                fn test() -> Result<(), String> {
+                    setup_test_env!();
+                    $body
                 }
             }
         };
-    }
+       }
+
+    // Edge case generator
 
     pub(crate) use {
-        add_files, exhaustive_test_suite, setup_test_env, test_suite,
+        add_files, exhaustive_test_suite, feature_combination_test, setup_test_env, test_suite,
     };
 }
 
@@ -166,45 +151,41 @@ mod basic {
         }
     });
 }
+
 // Example usage to show the simple integration
-#[cfg(test)]
-mod basic {
-    use super::*;
-    use test_utils::*;
-    exhaustive_test_suite!(core_functionality {
-        test_basic_operations {
-            let mut files = SourceFilesMap::<u8>::new();
-            add_files!(files => {
-                "main.rs" b"fn main() {}",
-                "lib.rs" b"pub mod utils;"
-            });
-            files.finalize()?;
-            Ok(files)
-        }
+test_utils::exhaustive_test_suite!(core_functionality {
+    test_basic_operations {
+        let mut files = SourceFilesMap::<u8>::new();
+        test_utils::add_files!(files => {
+            "main.rs" b"fn main() {}",
+            "lib.rs" b"pub mod utils;"
+        });
+        files.finalize()?;
+        Ok(files)
+    }
 
-        test_position_encoding {
-            let pos = create_absolute_position(1_u8, 10, 5, 15, 20);
-            Ok(pos)
-        }
+    test_position_encoding {
+        let pos = create_absolute_position(1_u8, 10, 5, 15, 20);
+        Ok(pos)
+    }
 
-        test_max_files {
-            let mut files = SourceFilesMap::<u8>::new();
-            for i in 0..u8::MAX {
-                files.add_file(format!("file_{}.rs", i), vec![]);
-            }
-            files.finalize()
+    test_max_files {
+        let mut files = SourceFilesMap::<u8>::new();
+        for i in 0..u8::MAX {
+            files.add_file(format!("file_{}.rs", i), vec![]);
         }
+        files.finalize()
+    }
 
-        test_duplicate_paths {
-            let mut files = SourceFilesMap::<u8>::new();
-            add_files!(files => {
-                "dup.rs" b"content",
-                "dup.rs" b"different"
-            });
-            files.finalize()
-        }
-    });
-}
+    test_duplicate_paths {
+        let mut files = SourceFilesMap::<u8>::new();
+        test_utils::add_files!(files => {
+            "dup.rs" b"content",
+            "dup.rs" b"different"
+        });
+        files.finalize()
+    }
+});
 
 #[cfg(feature = "rt-feedback")]
 #[cfg(test)]
@@ -314,31 +295,6 @@ mod rt_feedback {
 
         Ok(())
     }
-    // exhaustive_test_suite!(runtime_feedback {
-    //     test_feedback_tracking {
-    //         let feedback = Arc::new(Mutex::new(RuntimeFeedback::default()));
-    //         let mut files = SourceFilesMap::<u8>::with_feedback(Some(feedback.clone()));
-    //         add_files!(files => {
-    //             "large.bin" vec![0u8; 1024 * 1024],
-    //             "small.txt" b"tiny"
-    //         });
-    //         files.finalize()?;
-    //         feedback.lock().unwrap().clone()
-    //     }
-
-    // test_multiple_instances {
-    //     let feedback = Arc::new(Mutex::new(RuntimeFeedback::default()));
-    //     let mut files1 = SourceFilesMap::<u8>::with_feedback(Some(feedback.clone()));
-    //     files1.add_file("f1.rs".to_string(), vec![]);
-    //     files1.finalize()?;
-
-    //     let mut files2 = SourceFilesMap::<u8>::with_feedback(Some(feedback.clone()));
-    //     files2.add_file("f2.rs".to_string(), vec![]);
-    //     files2.finalize()?;
-
-    //     feedback.lock().unwrap().clone()
-    // }
-    // });
 }
 #[cfg(feature = "view")]
 #[cfg(test)]
@@ -346,7 +302,7 @@ mod view {
     use super::*;
     use crate::*;
     use test_utils::*;
-    test_suite!(view_tests {
+    test_suite!(view {
         test_multi_line_view {
             let mut files = SourceFilesMap::<u8>::new();
             add_files!(files => {
@@ -356,56 +312,82 @@ mod view {
 
             let file_id = files.get_id("multiline.txt").unwrap();
             let pos = create_relative_position(1, 1, 3, 5);
-            let content =unsafe{ std::str::from_utf8_unchecked(files.view(file_id, &pos).unwrap())};
+            let content = unsafe { std::str::from_utf8_unchecked(files.view(file_id, &pos).unwrap()) };
             insta::assert_debug_snapshot!(content);
         }
     });
-
-    // exhaustive_test_suite!(view_feature {
-    //         test_line_offsets {
-    //             let mut files = SourceFilesMap::<u8>::new();
-    //             add_files!(files => {
-    //                 "multiline.txt" b"Line1\nLine2\nLine3"
-    //             });
-    //             files.finalize()?;
-    //             files.line_offsets.clone()
-    //         }
-
-    //         test_content_slicing {
-    //             let mut files = SourceFilesMap::<u8>::new();
-    //             add_files!(files => {
-    //                 "utf8.txt" "🦀\n📦\n🚀".as_bytes()
-    //             });
-    //             files.finalize()?;
-    //             let file_id = files.get_id("utf8.txt").unwrap();
-    //             files.view(file_id, &create_relative_position(1, 1, 3, 4))
-    //         }
-    //     });
 }
-
-#[cfg(feature = "serde")]
 #[cfg(test)]
-mod serde {
+mod comprehensive {
     use super::*;
-    
-    
-    // exhaustive_test_suite!(serde_integration {
-    //     test_roundtrip_serialization {
-    //         let mut files = SourceFilesMap::<u8>::new();
-    //         add_files!(files => {
-    //             "serde_test.rs" b"serialized content"
-    //         });
-    //         files.finalize()?;
+    use crate::*;
+    use test_utils::*;
 
-    //         let serialized = serde_json::to_string(&files).unwrap();
-    //         let deserialized: SourceFilesMap<u8> = serde_json::from_str(&serialized)?;
-    //         deserialized
-    //     }
+    // Utilizing the exhaustive_test_suite macro for comprehensive testing
+    exhaustive_test_suite!(source_files_map {
+        test_basic_file_operations {
+            let mut files = SourceFilesMap::<u16>::new();
+            add_files!(files => {
+                "src/main.rs" b"fn main() { println!(\"Hello, world!\"); }",
+                "src/lib.rs" b"pub mod utils;\npub fn helper() -> bool { true }",
+                "README.md" b"# Project Documentation\n\nThis is a sample project."
+            });
+            files.finalize()?;
 
-    //     test_position_serialization {
-    //         let pos = create_absolute_position(1, 10, 5, 15, 20);
-    //         let serialized = serde_json::to_string(&pos).unwrap();
-    //         serde_json::from_str::<AbsolutePosition<u8>>(&serialized)
-    //     }
-    // });
+            // Verify file ids can be retrieved
+            assert!(files.get_id("src/main.rs").is_some());
+            assert!(files.get_id("src/lib.rs").is_some());
+            assert!(files.get_id("README.md").is_some());
+            Ok(files)
+        }
+
+        test_file_id_uniqueness {
+            let mut files = SourceFilesMap::<u16>::new();
+            add_files!(files => {
+                "project1/src/main.rs" b"fn main() {}",
+                "project2/src/main.rs" b"fn main() {}"
+            });
+            files.finalize()?;
+
+            let id1 = files.get_id("project1/src/main.rs").unwrap();
+            let id2 = files.get_id("project2/src/main.rs").unwrap();
+
+            assert_ne!(id1, id2, "File IDs should be unique across different paths");
+            Ok((id1, id2))
+        }
+
+        test_position_creation {
+            let mut files = SourceFilesMap::<u16>::new();
+            add_files!(files => {
+                "test.rs" b"fn example() {\n    let x = 42;\n    println!(\"Value: {}\", x);\n}"
+            });
+            files.finalize()?;
+
+            let file_id = files.get_id("test.rs").unwrap();
+
+            // Test absolute position creation
+            let abs_pos = create_absolute_position(file_id, 2, 1, 3, 20);
+
+            // Test relative position creation
+            let rel_pos = create_relative_position(1, 1, 3, 20);
+
+            Ok((abs_pos, rel_pos))
+        }
+    });
+
+    // Feature combination test for conditional compilation
+    test_utils::feature_combination_test!("rt-feedback", "view", file_tracking_with_view, {
+        let mut files = SourceFilesMap::<u16>::new();
+        add_files!(files => {
+            "tracked_view_file.rs" b"// Tracked file with view support"
+        });
+        files.finalize()?;
+
+        let file_id = files.get_id("tracked_view_file.rs").unwrap();
+        let pos = create_relative_position(1, 1, 1, 10);
+        let view_result = files.view(file_id, &pos);
+
+        assert!(view_result.is_some());
+        Ok(())
+    });
 }
