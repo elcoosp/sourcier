@@ -1,3 +1,5 @@
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -72,6 +74,12 @@ pub trait SourceFilePosition {
 }
 
 /// Position with absolute file reference
+///
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound = "Id: Serialize + serde::de::DeserializeOwned")
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AbsolutePosition<Id: FileId>(u64, PhantomData<Id>);
 
@@ -80,7 +88,11 @@ impl<Id: FileId> AbsolutePosition<Id> {
     pub fn new(file_id: Id, start_line: u16, start_col: u8, end_line: u16, end_col: u8) -> Self {
         let file_id_u64: u64 = file_id.into();
 
-        let encoded = (file_id_u64 << Id::FILE_ID_SHIFT) | ((start_line as u64) << Id::START_LINE_SHIFT) | ((start_col as u64) << Id::START_COL_SHIFT) | ((end_line as u64) << Id::END_LINE_SHIFT) | ((end_col as u64) << Id::END_COL_SHIFT);
+        let encoded = (file_id_u64 << Id::FILE_ID_SHIFT)
+            | ((start_line as u64) << Id::START_LINE_SHIFT)
+            | ((start_col as u64) << Id::START_COL_SHIFT)
+            | ((end_line as u64) << Id::END_LINE_SHIFT)
+            | ((end_col as u64) << Id::END_COL_SHIFT);
 
         Self(encoded, PhantomData)
     }
@@ -124,6 +136,7 @@ impl<Id: FileId> SourceFilePosition for AbsolutePosition<Id> {
 }
 
 /// Position relative to a file (file ID not included)
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RelativePosition(u64);
 
@@ -134,7 +147,9 @@ impl RelativePosition {
 
     /// Create a new relative position
     pub fn new(start_line: u16, start_col: u8, end_line: u16, end_col: u8) -> Self {
-        let encoded = ((start_line as u64) << Self::START_LINE_SHIFT) | ((start_col as u64) << Self::START_COL_SHIFT) | ((end_line as u64) << Self::END_LINE_SHIFT)
+        let encoded = ((start_line as u64) << Self::START_LINE_SHIFT)
+            | ((start_col as u64) << Self::START_COL_SHIFT)
+            | ((end_line as u64) << Self::END_LINE_SHIFT)
             | end_col as u64;
 
         Self(encoded)

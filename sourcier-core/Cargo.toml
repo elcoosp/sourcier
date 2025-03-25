@@ -5,7 +5,9 @@ edition = "2024"
 
 [features]
 rt-feedback = []
-view = ["dep:memchr"]
-default = ["view", "rt-feedback"]
+serde = ["dep:serde"]
+view = []
+default = ["view", "rt-feedback", "serde"]
 [dependencies]
-memchr = { workspace = true, optional = true }
+memchr = { workspace = true }
+serde = { workspace = true, optional = true }
