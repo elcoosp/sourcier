@@ -315,6 +315,31 @@ mod rt_feedback {
 
         Ok(())
     }
+    // exhaustive_test_suite!(runtime_feedback {
+    //     test_feedback_tracking {
+    //         let feedback = Arc::new(Mutex::new(RuntimeFeedback::default()));
+    //         let mut files = SourceFilesMap::<u8>::with_feedback(Some(feedback.clone()));
+    //         add_files!(files => {
+    //             "large.bin" vec![0u8; 1024 * 1024],
+    //             "small.txt" b"tiny"
+    //         });
+    //         files.finalize()?;
+    //         feedback.lock().unwrap().clone()
+    //     }
+
+    // test_multiple_instances {
+    //     let feedback = Arc::new(Mutex::new(RuntimeFeedback::default()));
+    //     let mut files1 = SourceFilesMap::<u8>::with_feedback(Some(feedback.clone()));
+    //     files1.add_file("f1.rs".to_string(), vec![]);
+    //     files1.finalize()?;
+
+    //     let mut files2 = SourceFilesMap::<u8>::with_feedback(Some(feedback.clone()));
+    //     files2.add_file("f2.rs".to_string(), vec![]);
+    //     files2.finalize()?;
+
+    //     feedback.lock().unwrap().clone()
+    // }
+    // });
 }
 #[cfg(feature = "view")]
 #[cfg(test)]
@@ -336,4 +361,52 @@ mod view {
             insta::assert_debug_snapshot!(content);
         }
     });
+
+    // exhaustive_test_suite!(view_feature {
+    //         test_line_offsets {
+    //             let mut files = SourceFilesMap::<u8>::new();
+    //             add_files!(files => {
+    //                 "multiline.txt" b"Line1\nLine2\nLine3"
+    //             });
+    //             files.finalize()?;
+    //             files.line_offsets.clone()
+    //         }
+
+    //         test_content_slicing {
+    //             let mut files = SourceFilesMap::<u8>::new();
+    //             add_files!(files => {
+    //                 "utf8.txt" "🦀\n📦\n🚀".as_bytes()
+    //             });
+    //             files.finalize()?;
+    //             let file_id = files.get_id("utf8.txt").unwrap();
+    //             files.view(file_id, &create_relative_position(1, 1, 3, 4))
+    //         }
+    //     });
+}
+
+#[cfg(feature = "serde")]
+#[cfg(test)]
+mod serde {
+    use super::*;
+    use crate::*;
+    use test_utils::*;
+    // exhaustive_test_suite!(serde_integration {
+    //     test_roundtrip_serialization {
+    //         let mut files = SourceFilesMap::<u8>::new();
+    //         add_files!(files => {
+    //             "serde_test.rs" b"serialized content"
+    //         });
+    //         files.finalize()?;
+
+    //         let serialized = serde_json::to_string(&files).unwrap();
+    //         let deserialized: SourceFilesMap<u8> = serde_json::from_str(&serialized)?;
+    //         deserialized
+    //     }
+
+    //     test_position_serialization {
+    //         let pos = create_absolute_position(1, 10, 5, 15, 20);
+    //         let serialized = serde_json::to_string(&pos).unwrap();
+    //         serde_json::from_str::<AbsolutePosition<u8>>(&serialized)
+    //     }
+    // });
 }
