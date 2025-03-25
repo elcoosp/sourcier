@@ -1,5 +1,9 @@
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 // Compact line offset representation
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CompactLineOffsets {
     // Store offsets as u32 to save memory
     offsets: Vec<u32>,

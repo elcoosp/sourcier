@@ -1,12 +1,21 @@
+#[cfg(feature = "view")]
 use crate::SourceFilePosition;
+#[cfg(feature = "view")]
 use crate::clo::CompactLineOffsets;
 use crate::fid::FileId;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryInto;
 
 #[cfg(feature = "rt-feedback")]
 use std::sync::{Arc, Mutex};
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound = "Id: Serialize + serde::de::DeserializeOwned")
+)]
 #[derive(Debug, Clone)]
 pub struct SourceFilesMap<Id: FileId> {
     files: Vec<FileEntry>,
@@ -16,13 +25,16 @@ pub struct SourceFilesMap<Id: FileId> {
 
     // Feature-gated view state
     #[cfg(feature = "view")]
+    #[cfg_attr(feature = "serde", serde(skip))]
     line_offsets: HashMap<Id, CompactLineOffsets>,
     // Feature-gated feedback state
     #[cfg(feature = "rt-feedback")]
+    #[cfg_attr(feature = "serde", serde(skip))]
     feedback: Option<Arc<Mutex<RuntimeFeedback>>>,
 }
 
 #[cfg(feature = "rt-feedback")]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Default)]
 pub struct RuntimeFeedback {
     pub total_files: usize,
@@ -31,6 +43,7 @@ pub struct RuntimeFeedback {
     pub usage_count: u32,
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
 struct FileEntry {
     path: String,
@@ -56,6 +69,7 @@ impl<Id: FileId> SourceFilesMap<Id> {
             expected_files: Self::DEFAULT_FILE_COUNT,
             #[cfg(feature = "view")]
             line_offsets: HashMap::with_capacity(Self::DEFAULT_FILE_COUNT),
+            #[cfg(feature = "rt-feedback")]
             feedback: None,
         }
     }
@@ -84,6 +98,7 @@ impl<Id: FileId> SourceFilesMap<Id> {
             files: Vec::with_capacity(expected),
             path_to_id: HashMap::with_capacity(expected),
             avg_file_size: avg_size,
+            #[cfg(feature = "view")]
             line_offsets: HashMap::with_capacity(expected),
             expected_files: expected,
             feedback,
