@@ -1,0 +1,41 @@
+---
+source: sourcier-core/src/tests.rs
+expression: val
+snapshot_kind: text
+---
+files:
+  - path: lib.rs
+    content:
+      - 112
+      - 117
+      - 98
+      - 32
+      - 109
+      - 111
+      - 100
+      - 32
+      - 117
+      - 116
+      - 105
+      - 108
+      - 115
+      - 59
+  - path: main.rs
+    content:
+      - 102
+      - 110
+      - 32
+      - 109
+      - 97
+      - 105
+      - 110
+      - 40
+      - 41
+      - 32
+      - 123
+      - 125
+path_to_id:
+  lib.rs: 1
+  main.rs: 2
+avg_file_size: 2048
+expected_files: 100

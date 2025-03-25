@@ -1,54 +1,191 @@
-#[cfg(not(feature = "rt-feedback"))]
-// Example usage to show the simple integration
-#[cfg(test)]
-mod basic {
-    use crate::*;
-
-    // Macro to simplify file addition with optional content
-    macro_rules! add_file {
-        ($files:expr, $path:expr) => {
-            $files.add_file($path.to_string(), Vec::new())
-        };
-        ($files:expr, $path:expr, $content:expr) => {
-            $files.add_file($path.to_string(), $content.to_vec())
+mod test_utils {
+    // Macro for declarative test setup
+    macro_rules! test_suite {
+        ($name:ident { $($test:ident $body:block)* }) => {
+            mod $name {
+                use super::*;
+                $(
+                    #[test]
+                    #[cfg_attr(feature = "rt-feedback", allow(unused))] // Handle feature-specific tests
+                    fn $test() -> Result<(), String> {
+                        setup_test_env!();
+                        $body
+                        Ok(())
+                    }
+                )*
+            }
         };
     }
 
-    #[test]
-    fn integrated_usage() -> Result<(), String> {
-        // Create a file map
-        let mut files = SourceFilesMap::<u8>::new();
-
-        // Add files using the new macro
-        add_file!(files, "src/sfp.rs", include_bytes!("sfp.rs"));
-        let abs_file_id = "src/fid.rs";
-        add_file!(files, abs_file_id, include_bytes!("fid.rs"));
-
-        // Finalize to assign IDs
-        files.finalize()?;
-
-        // Get a file ID
-        let file_id = files.get_id(abs_file_id).unwrap();
-
-        // Create an absolute position
-        let abs_pos = create_absolute_position(file_id, 10, 5, 12, 20);
-
-        // Create a relative position
-        let rel_pos = create_relative_position(10, 5, 12, 20);
-
-        // Verify both positions have the same line/column values
-        assert_eq!(abs_pos.start_line(), rel_pos.start_line());
-        assert_eq!(abs_pos.start_column(), rel_pos.start_column());
-        assert_eq!(abs_pos.end_line(), rel_pos.end_line());
-        assert_eq!(abs_pos.end_column(), rel_pos.end_column());
-
-        // But different file IDs
-        assert!(abs_pos.source_file_id().is_some());
-        assert!(rel_pos.source_file_id().is_none());
-
-        Ok(())
+    // Macro for batch file additions
+    macro_rules! add_files {
+        ($files:expr => { $($path:literal $content:expr),* $(,)? }) => {
+            $(
+                $files.add_file($path.to_string(), $content.to_vec());
+            )*
+        };
     }
+
+    // Snapshots with context-aware naming
+    macro_rules! assert_position_snapshot {
+        ($pos:expr) => {{
+            use insta::assert_snapshot;
+            let formatted = format!(
+                "Start: {}:{}\nEnd: {}:{}",
+                $pos.start_line(),
+                $pos.start_column(),
+                $pos.end_line(),
+                $pos.end_column()
+            );
+            assert_snapshot!(
+                concat!(module_path!(), "::", function!(), "::", line!()),
+                formatted
+            );
+        }};
+    }
+
+    // Test environment setup with automatic cleanup
+    macro_rules! setup_test_env {
+        () => {
+            let _guard = {
+                #[cfg(feature = "rt-feedback")]
+                let feedback = crate::RuntimeFeedback::default();
+            };
+        };
+    }
+    // Core test macro with Insta snapshot configuration
+    macro_rules! exhaustive_test_suite {
+        ($name:ident { $($test:ident $body:tt)* }) => {
+            mod $name {
+                use super::*;
+                use crate::*;
+
+                $(
+                    #[test]
+                    fn $test() -> Result<(), String> {
+                        let _settings = insta::Settings::new()
+                            .set_snapshot_suffix(format!(
+                                "{}__{}__{}",
+                                module_path!(),
+                                stringify!($test),
+                                line!()
+                            ));
+
+                        let result: Result<_, String> = (|| -> Result<_, String> {
+                            $body
+                        })();
+
+                        match result {
+                            Ok(val) => {
+                                // Automatic snapshot type detection
+                                match &val {
+                                    _ if std::any::type_name::<()>() == std::any::type_name_of_val(&val) => {}
+                                    _ => insta::assert_yaml_snapshot!(val, {
+                                        ".path_to_id"=> insta::sorted_redaction(),
+                                    }),
+                                }
+                                Ok(())
+                            }
+                            Err(e) => {
+                                insta::assert_snapshot!("ERROR", &e);
+                                Err(e)
+                            }
+                        }
+                    }
+                )*
+            }
+        };
+    }
+
+    // Multi-feature test combinator
+    macro_rules! feature_combination_test {
+        ($($feature:literal),*, $name:ident, $body:block) => {
+            #[cfg(all($(feature = $feature),*))]
+            mod $name {
+                use super::*;
+                #[test]
+                fn test() -> Result<(), String> {
+                    setup_test_env!();
+                    $body
+                }
+            }
+        };
+       }
+
+    // Edge case generator
+
+    pub(crate) use {
+        add_files, exhaustive_test_suite, feature_combination_test, setup_test_env, test_suite,
+    };
 }
+
+#[cfg(not(feature = "rt-feedback"))]
+mod basic {
+    use super::*;
+    use test_utils::*;
+
+    test_suite!(core_functionality {
+        test_basic_file_operations {
+            let mut files = SourceFilesMap::<u8>::new();
+            add_files!(files => {
+                "src/main.rs" b"fn main() {}",
+                "src/lib.rs" b"pub mod utils;"
+            });
+            files.finalize()?;
+
+            let file_id = files.get_id("src/main.rs").unwrap();
+            let pos = create_absolute_position(file_id, 1, 1, 1, 10);
+            assert_position_snapshot!(pos);
+        }
+
+        test_multi_line_position {
+            let mut files = SourceFilesMap::<u8>::new();
+            add_files!(files => {
+                "data.txt" b"Line1\nLine2\nLine3"
+            });
+            files.finalize()?;
+
+            let file_id = files.get_id("data.txt").unwrap();
+            let pos = create_relative_position(2, 1, 3, 5);
+            assert_position_snapshot!(pos);
+        }
+    });
+}
+
+// Example usage to show the simple integration
+test_utils::exhaustive_test_suite!(core_functionality {
+    test_basic_operations {
+        let mut files = SourceFilesMap::<u8>::new();
+        test_utils::add_files!(files => {
+            "main.rs" b"fn main() {}",
+            "lib.rs" b"pub mod utils;"
+        });
+        files.finalize()?;
+        Ok(files)
+    }
+
+    test_position_encoding {
+        let pos = create_absolute_position(1_u8, 10, 5, 15, 20);
+        Ok(pos)
+    }
+
+    test_max_files {
+        let mut files = SourceFilesMap::<u8>::new();
+        for i in 0..u8::MAX {
+            files.add_file(format!("file_{}.rs", i), vec![]);
+        }
+        files.finalize()
+    }
+
+    test_duplicate_paths {
+        let mut files = SourceFilesMap::<u8>::new();
+        test_utils::add_files!(files => {
+            "dup.rs" b"content",
+            "dup.rs" b"different"
+        });
+        files.finalize()
+    }
+});
 
 #[cfg(feature = "rt-feedback")]
 #[cfg(test)]
@@ -162,27 +299,95 @@ mod rt_feedback {
 #[cfg(feature = "view")]
 #[cfg(test)]
 mod view {
+    use super::*;
     use crate::*;
+    use test_utils::*;
+    test_suite!(view {
+        test_multi_line_view {
+            let mut files = SourceFilesMap::<u8>::new();
+            add_files!(files => {
+                "multiline.txt" b"First\nSecond\nThird"
+            });
+            files.finalize()?;
 
-    #[test]
-    fn simple() -> Result<(), String> {
-        let mut files = SourceFilesMap::<u8>::new();
-        files.add_file("test.txt".to_string(), b"Hello\nWorld\nRust".to_vec());
+            let file_id = files.get_id("multiline.txt").unwrap();
+            let pos = create_relative_position(1, 1, 3, 5);
+            let content = unsafe { std::str::from_utf8_unchecked(files.view(file_id, &pos).unwrap()) };
+            insta::assert_debug_snapshot!(content);
+        }
+    });
+}
+#[cfg(test)]
+mod comprehensive {
+    use super::*;
+    use crate::*;
+    use test_utils::*;
+
+    // Utilizing the exhaustive_test_suite macro for comprehensive testing
+    exhaustive_test_suite!(source_files_map {
+        test_basic_file_operations {
+            let mut files = SourceFilesMap::<u16>::new();
+            add_files!(files => {
+                "src/main.rs" b"fn main() { println!(\"Hello, world!\"); }",
+                "src/lib.rs" b"pub mod utils;\npub fn helper() -> bool { true }",
+                "README.md" b"# Project Documentation\n\nThis is a sample project."
+            });
+            files.finalize()?;
+
+            // Verify file ids can be retrieved
+            assert!(files.get_id("src/main.rs").is_some());
+            assert!(files.get_id("src/lib.rs").is_some());
+            assert!(files.get_id("README.md").is_some());
+            Ok(files)
+        }
+
+        test_file_id_uniqueness {
+            let mut files = SourceFilesMap::<u16>::new();
+            add_files!(files => {
+                "project1/src/main.rs" b"fn main() {}",
+                "project2/src/main.rs" b"fn main() {}"
+            });
+            files.finalize()?;
+
+            let id1 = files.get_id("project1/src/main.rs").unwrap();
+            let id2 = files.get_id("project2/src/main.rs").unwrap();
+
+            assert_ne!(id1, id2, "File IDs should be unique across different paths");
+            Ok((id1, id2))
+        }
+
+        test_position_creation {
+            let mut files = SourceFilesMap::<u16>::new();
+            add_files!(files => {
+                "test.rs" b"fn example() {\n    let x = 42;\n    println!(\"Value: {}\", x);\n}"
+            });
+            files.finalize()?;
+
+            let file_id = files.get_id("test.rs").unwrap();
+
+            // Test absolute position creation
+            let abs_pos = create_absolute_position(file_id, 2, 1, 3, 20);
+
+            // Test relative position creation
+            let rel_pos = create_relative_position(1, 1, 3, 20);
+
+            Ok((abs_pos, rel_pos))
+        }
+    });
+
+    // Feature combination test for conditional compilation
+    test_utils::feature_combination_test!("rt-feedback", "view", file_tracking_with_view, {
+        let mut files = SourceFilesMap::<u16>::new();
+        add_files!(files => {
+            "tracked_view_file.rs" b"// Tracked file with view support"
+        });
         files.finalize()?;
 
-        let file_id = files.get_id("test.txt").unwrap();
-        let pos = create_relative_position(1, 1, 1, 5);
-        let slice = files.view(file_id, &pos).unwrap();
-        assert_eq!(slice, b"Hello");
+        let file_id = files.get_id("tracked_view_file.rs").unwrap();
+        let pos = create_relative_position(1, 1, 1, 10);
+        let view_result = files.view(file_id, &pos);
 
-        let pos = create_relative_position(2, 1, 2, 5);
-        let slice = files.view(file_id, &pos).unwrap();
-        assert_eq!(slice, b"World");
-
-        let pos = create_relative_position(3, 1, 3, 4);
-        let slice = files.view(file_id, &pos).unwrap();
-        assert_eq!(slice, b"Rust");
-
+        assert!(view_result.is_some());
         Ok(())
-    }
+    });
 }

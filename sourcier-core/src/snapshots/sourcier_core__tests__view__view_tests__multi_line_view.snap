@@ -1,0 +1,6 @@
+---
+source: sourcier-core/src/tests.rs
+expression: content
+snapshot_kind: text
+---
+"First\nSecond\nThird"

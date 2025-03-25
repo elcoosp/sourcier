@@ -8,6 +8,9 @@ rt-feedback = []
 serde = ["dep:serde"]
 view = []
 default = ["view", "rt-feedback", "serde"]
+[dev-dependencies]
+insta = { workspace = true }
+trybuild = { workspace = true }
 [dependencies]
 memchr = { workspace = true }
 serde = { workspace = true, optional = true }

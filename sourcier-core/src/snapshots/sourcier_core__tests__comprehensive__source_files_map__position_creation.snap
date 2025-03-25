@@ -1,0 +1,8 @@
+---
+source: sourcier-core/src/tests.rs
+expression: val
+snapshot_kind: text
+---
+- - 281483583423252
+  - ~
+- 4311745300
