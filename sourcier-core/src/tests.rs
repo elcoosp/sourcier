@@ -130,8 +130,7 @@ mod test_utils {
     }
 
     pub(crate) use {
-        add_files, assert_position_snapshot, edge_case, exhaustive_test_suite,
-        feature_combination_test, setup_test_env, test_suite,
+        add_files, exhaustive_test_suite, setup_test_env, test_suite,
     };
 }
 
@@ -184,7 +183,7 @@ mod basic {
         }
 
         test_position_encoding {
-            let pos = create_absolute_position(1 as u8, 10, 5, 15, 20);
+            let pos = create_absolute_position(1_u8, 10, 5, 15, 20);
             Ok(pos)
         }
 
@@ -388,8 +387,8 @@ mod view {
 #[cfg(test)]
 mod serde {
     use super::*;
-    use crate::*;
-    use test_utils::*;
+    
+    
     // exhaustive_test_suite!(serde_integration {
     //     test_roundtrip_serialization {
     //         let mut files = SourceFilesMap::<u8>::new();
