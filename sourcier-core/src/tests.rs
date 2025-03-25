@@ -1,3 +1,98 @@
+#[cfg(test)]
+mod test_utils {
+    // Macro for declarative test setup
+    macro_rules! test_suite {
+        ($name:ident { $($test:ident $body:block)* }) => {
+            mod $name {
+                use super::*;
+                $(
+                    #[test]
+                    #[cfg_attr(feature = "rt-feedback", allow(unused))] // Handle feature-specific tests
+                    fn $test() -> Result<(), String> {
+                        setup_test_env!();
+                        $body
+                        Ok(())
+                    }
+                )*
+            }
+        };
+    }
+
+    // Macro for batch file additions
+    macro_rules! add_files {
+        ($files:expr => { $($path:literal $content:expr),* $(,)? }) => {
+            $(
+                $files.add_file($path.to_string(), $content.to_vec());
+            )*
+        };
+    }
+
+    // Snapshots with context-aware naming
+    macro_rules! assert_position_snapshot {
+        ($pos:expr) => {{
+            use insta::assert_snapshot;
+            let formatted = format!(
+                "Start: {}:{}\nEnd: {}:{}",
+                $pos.start_line(),
+                $pos.start_column(),
+                $pos.end_line(),
+                $pos.end_column()
+            );
+            assert_snapshot!(
+                concat!(module_path!(), "::", function!(), "::", line!()),
+                formatted
+            );
+        }};
+    }
+
+    // Test environment setup with automatic cleanup
+    macro_rules! setup_test_env {
+        () => {
+            let _guard = {
+                #[cfg(feature = "rt-feedback")]
+                let feedback = crate::RuntimeFeedback::default();
+
+                // Reset global state if needed
+                crate::test_utils::TestEnvGuard::new()
+            };
+        };
+    }
+
+    pub(crate) use {add_files, assert_position_snapshot, setup_test_env, test_suite};
+}
+
+#[cfg(not(feature = "rt-feedback"))]
+mod basic {
+    use super::*;
+    use test_utils::*;
+
+    test_suite!(core_functionality {
+        test_basic_file_operations {
+            let mut files = SourceFilesMap::<u8>::new();
+            add_files!(files => {
+                "src/main.rs" b"fn main() {}",
+                "src/lib.rs" b"pub mod utils;"
+            });
+            files.finalize()?;
+
+            let file_id = files.get_id("src/main.rs").unwrap();
+            let pos = create_absolute_position(file_id, 1, 1, 1, 10);
+            assert_position_snapshot!(pos);
+        }
+
+        test_multi_line_position {
+            let mut files = SourceFilesMap::<u8>::new();
+            add_files!(files => {
+                "data.txt" b"Line1\nLine2\nLine3"
+            });
+            files.finalize()?;
+
+            let file_id = files.get_id("data.txt").unwrap();
+            let pos = create_relative_position(2, 1, 3, 5);
+            assert_position_snapshot!(pos);
+        }
+    });
+}
 #[cfg(not(feature = "rt-feedback"))]
 // Example usage to show the simple integration
 #[cfg(test)]
