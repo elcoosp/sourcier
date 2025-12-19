@@ -2,7 +2,8 @@
 name = "sourcier-core"
 version = "0.1.0"
 edition = "2024"
-
+description = "Compact and efficient source file mapping and position tracking"
+license = "MIT"
 [features]
 rt-feedback = []
 serde = ["dep:serde"]
