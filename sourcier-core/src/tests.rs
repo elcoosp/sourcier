@@ -51,7 +51,7 @@ mod test_utils {
         () => {
             let _guard = {
                 #[cfg(feature = "rt-feedback")]
-                let feedback = crate::RuntimeFeedback::default();
+                let _ = crate::RuntimeFeedback::default();
             };
         };
     }
@@ -117,7 +117,10 @@ mod test_utils {
     }
 
     // Export macros based on what's actually used
-    pub(crate) use exhaustive_test_suite;
+    #[allow(unused_imports)]
+    pub(crate) use {
+        add_files, exhaustive_test_suite, feature_combination_test, setup_test_env, test_suite,
+    };
 }
 
 #[cfg(not(feature = "rt-feedback"))]
