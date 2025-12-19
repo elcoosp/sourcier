@@ -1,4 +1,6 @@
+// tests.rs
 mod test_utils {
+    #![allow(unused_macros)]
     // Macro for declarative test setup
     macro_rules! test_suite {
         ($name:ident { $($test:ident $body:block)* }) => {
@@ -53,10 +55,12 @@ mod test_utils {
             };
         };
     }
+
     // Core test macro with Insta snapshot configuration
     macro_rules! exhaustive_test_suite {
         ($name:ident { $($test:ident $body:tt)* }) => {
             mod $name {
+                #![allow(unused_imports)]
                 use super::*;
                 use crate::*;
 
@@ -110,13 +114,10 @@ mod test_utils {
                 }
             }
         };
-       }
+    }
 
-    // Edge case generator
-
-    pub(crate) use {
-        add_files, exhaustive_test_suite, feature_combination_test, setup_test_env, test_suite,
-    };
+    // Export macros based on what's actually used
+    pub(crate) use exhaustive_test_suite;
 }
 
 #[cfg(not(feature = "rt-feedback"))]
@@ -296,12 +297,14 @@ mod rt_feedback {
         Ok(())
     }
 }
+
 #[cfg(feature = "view")]
 #[cfg(test)]
 mod view {
     use super::*;
     use crate::*;
     use test_utils::*;
+
     test_suite!(view {
         test_multi_line_view {
             let mut files = SourceFilesMap::<u8>::new();
@@ -317,6 +320,7 @@ mod view {
         }
     });
 }
+
 #[cfg(test)]
 mod comprehensive {
     use super::*;
