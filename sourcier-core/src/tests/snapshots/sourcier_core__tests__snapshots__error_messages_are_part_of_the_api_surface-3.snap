@@ -1,0 +1,5 @@
+---
+source: sourcier-core/src/tests/snapshots.rs
+expression: "PositionError::InvalidRange\n{ start_line: 2, start_col: 1, end_line: 1, end_col: 9 }.to_string()"
+---
+invalid position range: start 2:1 must not come after end 1:9 and all lines and columns must be at least 1

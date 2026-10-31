@@ -1,0 +1,5 @@
+---
+source: sourcier-core/src/tests/snapshots.rs
+expression: "core::str::from_utf8(view).expect(\"utf-8 content\")"
+---
+fn

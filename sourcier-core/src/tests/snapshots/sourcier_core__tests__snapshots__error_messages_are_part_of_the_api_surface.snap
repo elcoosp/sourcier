@@ -1,0 +1,5 @@
+---
+source: sourcier-core/src/tests/snapshots.rs
+expression: "MapError::TooManyFiles { max: 255 }.to_string()"
+---
+cannot register more than 255 files for this file id type

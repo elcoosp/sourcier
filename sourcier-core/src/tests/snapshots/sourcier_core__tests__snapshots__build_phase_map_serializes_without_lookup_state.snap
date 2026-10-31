@@ -1,0 +1,26 @@
+---
+source: sourcier-core/src/tests/snapshots.rs
+expression: files
+---
+files:
+  - path: pending.rs
+    content:
+      - 110
+      - 111
+      - 116
+      - 32
+      - 102
+      - 105
+      - 110
+      - 97
+      - 108
+      - 105
+      - 122
+      - 101
+      - 100
+      - 32
+      - 121
+      - 101
+      - 116
+path_to_id: {}
+finalized: false

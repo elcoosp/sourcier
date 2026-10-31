@@ -1,0 +1,5 @@
+---
+source: sourcier-core/src/tests/snapshots.rs
+expression: "MapError::FileTooLarge { size: 4_294_967_296 }.to_string()"
+---
+file content of 4294967296 bytes exceeds the 4 GiB line offset limit

@@ -1,0 +1,10 @@
+---
+source: sourcier-core/src/tests/snapshots.rs
+expression: "[(\"compact_absolute\", compact.as_raw()),\n(\"standard_absolute\", standard.as_raw()), (\"relative\", relative.as_raw()),]"
+---
+- - compact_absolute
+  - 504406473980575750
+- - standard_absolute
+  - 18446744073692774657
+- - relative
+  - 12952012038
