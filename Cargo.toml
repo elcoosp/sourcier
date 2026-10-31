@@ -1,8 +1,61 @@
 [workspace]
 members = ["sourcier-core"]
 resolver = "3"
+
+[workspace.package]
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/elcoosp/sourcier"
+homepage = "https://github.com/elcoosp/sourcier"
+authors = ["elcoosp"]
+
 [workspace.dependencies]
-memchr = { version = "2.7.4" }
+memchr = "2.7"
 serde = { version = "1.0", features = ["derive"] }
-insta = { version = "1.42", features = ["yaml", "redactions"] }
-trybuild = "1.0"
+thiserror = "2.0"
+insta = { version = "1.43", features = ["yaml", "redactions"] }
+proptest = "1.9"
+serde_json = "1.0"
+
+[workspace.lints.rust]
+missing_docs = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+
+[package]
+name = "sourcier"
+description = "Compact and efficient source file mapping and position tracking"
+readme = "README.md"
+keywords = ["source-map", "position", "compiler", "diagnostics", "lsp"]
+categories = ["development-tools", "parsing", "data-structures"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
+[features]
+default = ["serde", "view", "rt-feedback"]
+serde = ["sourcier-core/serde"]
+view = ["sourcier-core/view"]
+rt-feedback = ["sourcier-core/rt-feedback"]
+
+[dependencies]
+sourcier-core = { path = "sourcier-core", version = "1.0.0" }
+
+[lints]
+workspace = true
