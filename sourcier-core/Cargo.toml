@@ -1,17 +1,37 @@
 [package]
 name = "sourcier-core"
-version = "0.1.0"
-edition = "2024"
-description = "Compact and efficient source file mapping and position tracking"
-license = "MIT"
+description = "Core implementation of compact source file mapping and position tracking"
+readme = "README.md"
+keywords = ["source-map", "position", "compiler", "diagnostics", "lsp"]
+categories = ["development-tools", "parsing", "data-structures"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+
 [features]
 rt-feedback = []
 serde = ["dep:serde"]
 view = []
-default = ["view", "rt-feedback", "serde"]
-[dev-dependencies]
-insta = { workspace = true }
-trybuild = { workspace = true }
+default = ["serde", "view", "rt-feedback"]
+
 [dependencies]
 memchr = { workspace = true }
 serde = { workspace = true, optional = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+proptest = { workspace = true }
+criterion = { version = "0.8", features = ["html_reports"] }
+serde_json = { workspace = true }
+
+[[bench]]
+name = "map"
+harness = false
+
+[lints]
+workspace = true
