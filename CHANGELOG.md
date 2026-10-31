@@ -10,53 +10,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Elevate to production-grade 1.0 release
+- Configure workspace for 1.0.0 release and add sourcier facade by @elcoosp
+- Update metadata, dependencies, and benchmark setup (core) by @elcoosp
 
 ### Changed
-- Remove untestable defensive branches from core modules
+- Remove obsolete clo module (core) by @elcoosp
+- Remove obsolete fid module (core) by @elcoosp
+- Restructure modules and improve crate-level documentation (core) by @elcoosp
+- Remove obsolete sfm module (core) by @elcoosp
+- Remove obsolete sfp module (core) by @elcoosp
 
 ### Documentation
-- Rewrite readme with centered header and badges
+- Overhaul README with comprehensive documentation and examples by @elcoosp
+
+### Miscellaneous
+- Overhaul release workflow with manual publishing and git-cliff by @elcoosp
+- Update gitignore for coverage and backup files by @elcoosp
+- Update dependencies and lockfile by @elcoosp
+- Remove obsolete core changelog by @elcoosp
+- License deny cliff changelog logo and ci workflows by @elcoosp
+- Fix logo by @elcoosp
+- Size logo by @elcoosp
 
 ### Tests
-- Restore insta snapshots and consolidate the suite for full coverage
+- Remove obsolete monolithic tests file (core) by @elcoosp
+- Remove obsolete snapshot file (core) by @elcoosp
+- Remove obsolete snapshot file (core) by @elcoosp
+- Remove obsolete snapshot file (core) by @elcoosp
+- Remove obsolete snapshot file (core) by @elcoosp
+- Remove obsolete snapshot file (core) by @elcoosp
+- Remove obsolete snapshot file (core) by @elcoosp
+- Remove obsolete snapshot file (core) by @elcoosp
+- Remove obsolete snapshot file (core) by @elcoosp
+- Remove obsolete snapshot file (core) by @elcoosp
+- Remove obsolete snapshot file (core) by @elcoosp
+- Remove obsolete snapshot file (core) by @elcoosp
+- Remove obsolete snapshot file (core) by @elcoosp
 
 ## [0.1.0] - 2025-12-19
 
 ### Added
-- Add fid, sfm and sfp mods to manage source file position in a compact u64 repr, and mapping path to id in O(1), utils in sfp (core)
-- Include content in SourceFilesMap create FileEntry underneath, sort using content length after path, preallocate & add `get_content` (core)
-- Poc RuntimeFeedback (with_feedback fn)
-- View poc
-- Add serde optional
+- Add fid, sfm and sfp mods to manage source file position in a compact u64 repr, and mapping path to id in O(1), utils in sfp (core) by @elcoosp
+- Include content in SourceFilesMap create FileEntry underneath, sort using content length after path, preallocate & add `get_content` (core) by @elcoosp
+- Poc RuntimeFeedback (with_feedback fn) by @elcoosp
+- View poc by @elcoosp
+- Add serde optional by @elcoosp
 
 ### Documentation
-- Up readme
+- Up readme by @elcoosp
 
 ### Fixed
-- Mv clo mod & use memchr (core)
-- Dep:memchr for view feat
-- Test issues
-- Fix remaining warns
+- Mv clo mod & use memchr (core) by @elcoosp
+- Dep:memchr for view feat by @elcoosp
+- Test issues by @elcoosp
+- Fix remaining warns by @elcoosp
 
 ### Miscellaneous
-- Clippy
-- Release workflow
-- Fix readme
-- Clippy
-- Fix release-plz
-- Release v0.1.0
-- Missing fields for release
+- Clippy by @elcoosp
+- Release workflow by @elcoosp
+- Fix readme by @elcoosp
+- Clippy by @elcoosp
+- Fix release-plz by @elcoosp
+- Release v0.1.0 by @github-actions[bot]
+- Missing fields for release by @elcoosp
 
 ### Tests
-- Add example integration
-- Add test_utils
-- Add test_suite macro with basic multiline view
-- Add exhaustive_test_suite macro to automate snapshots
-- Use yaml & redactions
-- Fix cargo.toml
-- More cases
-- Use exhaustive_test_suite macro
+- Add example integration by @elcoosp
+- Add test_utils by @elcoosp
+- Add test_suite macro with basic multiline view by @elcoosp
+- Add exhaustive_test_suite macro to automate snapshots by @elcoosp
+- Use yaml & redactions by @elcoosp
+- Fix cargo.toml by @elcoosp
+- More cases by @elcoosp
+- Use exhaustive_test_suite macro by @elcoosp
 
+## New Contributors
+- @elcoosp made their first contribution
+- @github-actions[bot] made their first contribution
+- @renovate[bot] made their first contribution
 
 
