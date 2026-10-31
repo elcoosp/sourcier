@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/logo.png" alt="sourcier Logo" width="200"/>
+  <img src="docs/logo.png" alt="sourcier Logo" width="300"/>
   <p>
     <strong>Compact and efficient source file mapping and position tracking, written in Rust.</strong><br/>
     Register source files once, hand out stable numeric ids and pack every span — file id, line and column — into a single <code>u64</code>. Look paths up in O(1), navigate files byte-accurately, and keep diagnostics positions cheap enough to store by the million. Built for compilers, linters, formatters, language servers and code editors.
