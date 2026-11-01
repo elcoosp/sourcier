@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - License deny cliff changelog logo and ci workflows by @elcoosp
 - Fix logo by @elcoosp
 - Size logo by @elcoosp
+- Update changelog by @github-actions[bot]
+- Logo by @elcoosp
 
 ### Tests
 - Remove obsolete monolithic tests file (core) by @elcoosp
