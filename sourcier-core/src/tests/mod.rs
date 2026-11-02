@@ -8,6 +8,8 @@
 
 pub mod feedback;
 pub mod lifecycle;
+#[cfg(all(feature = "view", feature = "parallel"))]
+pub mod parallel;
 pub mod positions;
 pub mod property;
 #[cfg(feature = "serde")]
