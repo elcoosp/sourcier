@@ -57,8 +57,15 @@ impl LineOffsets {
     }
 
     /// Builds the offset index of pre-validated content.
+    ///
+    /// A single `memchr` pass fills the offset vector: the counting pre-pass
+    /// of previous versions doubled the memory traffic of the hottest
+    /// finalization phase for no gain, since amortized growth of the vector
+    /// is far cheaper than a second SIMD scan of the whole content.
     fn build(content: &[u8], content_length: usize) -> Self {
-        let mut offsets = Vec::with_capacity(memchr::memchr_iter(b'\n', content).count() + 1);
+        // Typical source files average 30-60 bytes per line; the heuristic
+        // keeps reallocation rare without scanning the content twice.
+        let mut offsets = Vec::with_capacity(content.len() / 32 + 8);
         offsets.push(0_u32);
         offsets.extend(memchr::memchr_iter(b'\n', content).map(|pos| (pos + 1) as u32));
         Self {
@@ -77,6 +84,16 @@ impl LineOffsets {
     #[inline]
     pub fn content_length(&self) -> usize {
         self.content_length
+    }
+
+    /// Returns the raw byte offsets at which every line starts.
+    ///
+    /// The returned slice always starts with `0` and has exactly
+    /// [`line_count`](Self::line_count) entries; it is exposed so callers can
+    /// reuse the offsets in their own fast paths without re-scanning files.
+    #[inline]
+    pub fn line_starts(&self) -> &[u32] {
+        &self.offsets
     }
 
     /// Returns the half-open byte range of `line` (one-based), excluding the
@@ -99,6 +116,7 @@ impl LineOffsets {
     ///
     /// An offset equal to the content length maps to the last column of the
     /// last line.
+    #[inline]
     pub fn line_col_from_offset(&self, offset: usize) -> Option<(usize, usize)> {
         if offset > self.content_length {
             return None;
@@ -114,6 +132,7 @@ impl LineOffsets {
     ///
     /// A column pointing exactly at the end of the line resolves to the byte
     /// of the line terminator (or one past the last byte of the file).
+    #[inline]
     pub fn offset_from_line_col(&self, line: usize, col: usize) -> Option<usize> {
         if col == 0 {
             return None;
