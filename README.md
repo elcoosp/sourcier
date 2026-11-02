@@ -12,7 +12,7 @@
     <img src="https://img.shields.io/badge/Crates-2-6F4E37?style=flat-square" alt="Crates"/>
     <img src="https://img.shields.io/badge/Spans-one%20u64-FF4500?style=flat-square" alt="Spans"/>
     <img src="https://img.shields.io/badge/File%20Ids-u8%20%7C%20u16-4B32C3?style=flat-square" alt="File Ids"/>
-    <img src="https://img.shields.io/badge/Features-serde%20%7C%20view%20%7C%20rt--feedback-00BFFF?style=flat-square" alt="Features"/>
+    <img src="https://img.shields.io/badge/Features-serde%20%7C%20view%20%7C%20rt--feedback%20%7C%20parallel-00BFFF?style=flat-square" alt="Features"/>
     <img src="https://img.shields.io/badge/Unsafe-forbidden-8B0000?style=flat-square" alt="Unsafe"/>
     <img src="https://img.shields.io/badge/Tests-cargo%20nextest-007ACC?style=flat-square" alt="Tests"/>
     <img src="https://img.shields.io/badge/Coverage-100%25%20functions-brightgreen?style=flat-square" alt="Coverage"/>
@@ -28,7 +28,9 @@
 
 - **One `u64` per span.** File id, start line, start column, end line and end column are bit-packed together. Positions are `Copy`, cache-friendly, order naturally as integers and survive serialization round trips bit-exactly.
 - **Constant-time lookups.** After finalization, path to id, id to path and id to content are all O(1); line and column navigation is O(log n).
-- **Deterministic ids.** Finalizing sorts files by path, deduplicates registrations and assigns one-based ids, so the same set of files always produces the same ids.
+- **Zero-allocation finalization.** Paths up to 30 bytes live inline inside their entry (short-string optimization), so registering and finalizing typical source trees performs no per-path heap allocation at all.
+- **Verified, HashDoS-safe path index.** A per-map seeded open-addressed index maps paths to entries with 4 bytes per slot; every probe is verified against the stored path bytes, so collisions can never produce a wrong answer and adversarial keys cannot be precomputed.
+- **Deterministic ids.** Finalizing sorts files by path (with a registration-order tiebreak), deduplicates registrations and assigns one-based ids, so the same set of files always produces the same ids — and the first registration of a duplicate path always wins, even for hundreds of duplicates.
 - **Byte-accurate views.** With the `view` feature, a position resolves to the exact bytes it covers — including multi-line spans, line terminators and zero-width spans.
 - **Typed, sealed API.** The `FileId` trait is sealed (`u8` and `u16` only), error enums are `#[non_exhaustive]`, and the packed layouts are documented so raw values can be persisted safely.
 - **No unsafe code.** The whole workspace is `#![forbid(unsafe_code)]`.
@@ -37,7 +39,7 @@
 
 ```toml
 [dependencies]
-sourcier = "1.0"
+sourcier = "2.0"
 ```
 
 Or track the repository directly:
@@ -109,11 +111,12 @@ Positions are stable `u64` encodings. The table shows the bit range of each fiel
 
 All features are enabled by default and forwarded to `sourcier-core`.
 
-| Feature       | Default | Description                                                     |
-| ------------- | ------- | --------------------------------------------------------------- |
-| `serde`       | yes     | `Serialize`/`Deserialize` for maps, positions and line indexes. |
-| `view`        | yes     | Line offset indexes plus `view`/`view_str` byte extraction.     |
-| `rt-feedback` | yes     | Lock-free shared usage statistics (`RuntimeFeedback`).          |
+| Feature       | Default | Description                                                                      |
+| ------------- | ------- | -------------------------------------------------------------------------------- |
+| `serde`       | yes     | `Serialize`/`Deserialize` for maps, positions and line indexes.                  |
+| `view`        | yes     | Line offset indexes plus `view`/`view_str` byte extraction.                      |
+| `rt-feedback` | yes     | Lock-free shared usage statistics (`RuntimeFeedback`).                           |
+| `parallel`    | no      | Multi-threaded line-offset index construction with `rayon` for huge file sets.   |
 
 Trim them for a leaner build:
 
@@ -133,24 +136,34 @@ sourcier = { version = "1.0", default-features = false, features = ["view"] }
 | `SourceFilePosition`              | Uniform accessor trait over both position kinds.                |
 | `LineOffsets` (`view`)            | Compact per-line byte offset index with line/col mapping.       |
 | `RuntimeFeedback` (`rt-feedback`) | Atomic counters shared across maps via `Arc`.                   |
+| `line_offsets` (`view`)           | Accessor over the per-file index behind `view`.                 |
 | `MapError`, `PositionError`       | Typed, `non_exhaustive` error enums.                            |
 
 ## Performance
 
-Measured with the bundled criterion suite (`cargo bench -p sourcier-core`); treat the numbers as indicative:
+Measured with the bundled criterion suite (`cargo bench -p sourcier-core`) on the reference machine, comparing 2.0 against the 1.0 baseline in the same measurement window; treat the numbers as indicative:
 
-| Scenario                                | Time    |
-| --------------------------------------- | ------- |
-| Finalize 2,000 files x 200 lines        | ~5.6 ms |
-| 2,000 path-to-id lookups (one per file) | ~34 us  |
-| 1,000 multi-line `view` extractions     | ~13 us  |
-| Line offsets for 100 files x 1,000 lines| ~0.8 ms |
+| Scenario                                  | 1.0      | 2.0      | Change      |
+| ----------------------------------------- | -------- | -------- | ----------- |
+| Finalize 100 files x 50 lines             | ~64 us   | ~41 us   | **-35%**    |
+| Finalize 500 files x 100 lines            | ~709 us  | ~513 us  | **-28%**    |
+| Finalize phase only, 2,000 x 200 lines    | ~3.7 ms  | ~2.8 ms  | **-25%**    |
+| 1,000 multi-line `view` extractions       | ~14.4 us | ~4.4 us  | **-70%**    |
+| Line offsets for 100 files x 1,000 lines  | ~0.79 ms | ~0.69 ms | **-12%**    |
+| 1,000 offset-to-(line, col) probes        | -        | ~8.2 us  | new         |
+| Single-line `view_str` span               | -        | ~257 ns  | new         |
+| 2,000 path-to-id lookups (hits)           | ~34 us   | ~41 us   | see note    |
+| 2,000 path-to-id lookups (misses)         | -        | ~33 us   | new         |
+
+The 2.0 path-to-id index trades a small amount of hit latency (~20%) for byte-exact verification, HashDoS-resistant per-map seeding, zero allocations at finalization and roughly half the lookup-state memory. Hits and misses both terminate on the first empty slot, so misses are as cheap as hits.
 
 Design notes:
 
-- Finalization is a single `sort_unstable` plus one O(n) pass; file contents are never copied during finalization.
-- Line offsets use `memchr`-accelerated newline scanning and 4 bytes per line (`u32` offsets, files up to 4 GiB).
-- Path and content storage use `Box<str>`/`Box<[u8]>` to keep per-file overhead minimal.
+- Finalization is a single unstable sort with a registration-order tiebreak plus one O(n) pass; file contents are never copied during finalization, and no per-path string allocation happens (inline paths up to 30 bytes, `Box<str>` beyond).
+- Line offsets use a single `memchr`-accelerated scan (the 1.0 counting pre-pass is gone) and 4 bytes per line (`u32` offsets, files up to 4 GiB); opt into `parallel` to spread the scan across cores with `rayon` on many-core build machines (on a 2-core reference VM the thread-pool overhead outweighed the scan savings, which is why the feature is opt-in).
+- Lookups run through a verified open-addressed index: seeded Fx-style hashing, linear probing at a load factor of 0.5, and hash-plus-bytes verification so any collision pattern still resolves exactly.
+- Per-file line offsets live in a dense `Vec<Option<LineOffsets>>` indexed by id — `view` pays no hashing on its hot path.
+- Serialized map payloads carry only the raw entries and the phase flag; lookup state is rebuilt on load (v1 payloads with the redundant `path_to_id` table still deserialize).
 - `rt-feedback` uses atomics only; no locks are taken on the reporting path.
 
 ## Testing and verification
@@ -172,8 +185,9 @@ Snapshot tests live in `sourcier-core/src/tests/snapshots/` and are committed to
 
 > [!NOTE]
 > Property tests pin the round trips (position encoding, line/col to offset
-> inverse mapping, map lookup consistency) against hundreds of generated
-> cases, including adversarial deserialized maps that exceed the id capacity.
+> inverse mapping, map lookup consistency, first-registration-wins duplicate
+> resolution at hundreds-of-files scale) against hundreds of generated cases,
+> including adversarial deserialized maps that exceed the id capacity.
 > The 4 GiB line-offset limit is exercised end to end with lazily committed
 > allocations, so the oversized-file paths are tested for real.
 
@@ -183,4 +197,6 @@ Rust 1.99. The MSRV is verified in CI with `cargo check` across feature configur
 
 ## Semver policy
 
-This release is 1.0.0: the public API documented on docs.rs is stable and follows semantic versioning. Error enums are `#[non_exhaustive]`, the `FileId` trait is sealed, and the packed `u64` layouts are documented so raw values can be persisted.
+This release is 2.0.0: the public API documented on docs.rs is stable and follows semantic versioning. Error enums are `#[non_exhaustive]`, the `FileId` trait is sealed, and the packed `u64` layouts are documented so raw values can be persisted.
+
+The 2.0 wire format of `SourceFilesMap` dropped the redundant `path_to_id` table (it is derived from the sorted entries and rebuilt on load); 1.0 payloads that still carry the field deserialize without error and are ignored.
