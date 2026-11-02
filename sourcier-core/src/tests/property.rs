@@ -3,6 +3,11 @@
 use crate::{AbsolutePosition, RelativePosition, SourceFilePosition, SourceFilesMap};
 use proptest::prelude::*;
 
+/// Builds the duplicate-path used by the first-wins property test.
+fn dup_path(slot: usize) -> String {
+    format!("dup_file_{slot:02}.rs")
+}
+
 proptest! {
     #![proptest_config(proptest::prelude::ProptestConfig::with_cases(512))]
 
@@ -86,6 +91,40 @@ proptest! {
             };
             prop_assert_eq!(files.get_content(id), Some(expected.as_bytes()));
             prop_assert_eq!(files.get_path(id), Some(name.as_str()));
+        }
+    }
+
+    #[test]
+    fn duplicate_paths_keep_the_first_registration_at_scale(
+        // Hundreds of files with scattered duplicates stress the unstable
+        // sort used during finalization: the first-registered content of a
+        // duplicate path must survive regardless of sort internals.
+        pattern in proptest::collection::vec(0_usize..24, 300..460),
+    ) {
+        let mut files = SourceFilesMap::<u16>::new();
+        let mut first_content: Vec<Option<usize>> = vec![None; 24];
+        for (index, slot) in pattern.iter().enumerate() {
+            if first_content[*slot].is_none() {
+                first_content[*slot] = Some(index);
+            }
+            files
+                .add_file(dup_path(*slot), format!("content {index}"))
+                .expect("u16 capacity");
+        }
+        files.finalize().expect("u16 capacity");
+
+        prop_assert_eq!(files.len(), first_content.iter().flatten().count());
+        for (slot, first) in first_content.iter().enumerate() {
+            let first = first.expect("slot registered");
+            let path = dup_path(slot);
+            let expected = format!("content {first}");
+            let id = files.get_id(&path).expect("path survives dedup");
+            prop_assert_eq!(
+                files.get_content(id),
+                Some(expected.as_bytes()),
+                "first registration wins for slot {}",
+                slot
+            );
         }
     }
 }
