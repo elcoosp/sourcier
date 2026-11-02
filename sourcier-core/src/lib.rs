@@ -33,20 +33,27 @@
 //!
 //! # Feature flags
 //!
-//! | Feature       | Default | Description                                          |
-//! |---------------|---------|------------------------------------------------------|
+//! | Feature       | Default | Description                                            |
+//! |---------------|---------|--------------------------------------------------------|
 //! | `serde`       | yes     | Serialization support for maps and positions.        |
 //! | `view`        | yes     | Line offset indexes plus `view`/`view_str` lookups.  |
 //! | `rt-feedback` | yes     | Lock-free shared usage statistics (`RuntimeFeedback`). |
+//! | `parallel`    | no      | Multi-threaded line-offset index construction (rayon). |
 //!
 //! # Performance characteristics
 //!
 //! - Positions are single `u64` values: `Copy`, cache-friendly and free to
 //!   store by value.
 //! - Id, path and content lookups are O(1); line offset lookup is O(log n).
-//! - Finalization is a single O(n log n) sort plus one O(n) pass; no content
-//!   is copied during finalization.
-//! - Line offsets use `memchr`-accelerated scanning and 4 bytes per line.
+//! - Finalization is a single unstable sort (with a registration-order
+//!   tiebreak) plus one O(n) pass; no content is copied and no per-path
+//!   string is allocated (paths up to 30 bytes are stored inline).
+//! - Path lookups run through a verified open-addressed index: per-map
+//!   seeded hashing, 4 bytes per slot and hash-plus-bytes verification.
+//! - Line offsets use a single `memchr`-accelerated scan and 4 bytes per
+//!   line; the `parallel` feature spreads the scan across threads.
+//! - Serialized map payloads carry only the raw entries and the phase flag;
+//!   lookup state is derived and rebuilt on load.
 //!
 //! # Limits
 //!
