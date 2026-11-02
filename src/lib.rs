@@ -41,6 +41,7 @@
 //! - `serde` - serialization support for maps and positions.
 //! - `view` - line offset indexes plus `view`/`view_str` lookups.
 //! - `rt-feedback` - lock-free shared usage statistics.
+//! - `parallel` - multi-threaded line-offset index construction with `rayon`.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
