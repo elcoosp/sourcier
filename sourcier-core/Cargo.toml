@@ -16,10 +16,12 @@ authors.workspace = true
 rt-feedback = []
 serde = ["dep:serde"]
 view = []
+parallel = ["dep:rayon"]
 default = ["serde", "view", "rt-feedback"]
 
 [dependencies]
 memchr = { workspace = true }
+rayon = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
