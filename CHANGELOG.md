@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update changelog by @github-actions[bot]
 - Logo by @elcoosp
 - Update changelog by @github-actions[bot]
+- Update changelog by @github-actions[bot]
+- Rust 1.99 by @elcoosp
 
 ### Tests
 - Remove obsolete monolithic tests file (core) by @elcoosp
