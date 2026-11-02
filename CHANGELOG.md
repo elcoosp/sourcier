@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Size logo by @elcoosp
 - Update changelog by @github-actions[bot]
 - Logo by @elcoosp
+- Update changelog by @github-actions[bot]
 
 ### Tests
 - Remove obsolete monolithic tests file (core) by @elcoosp
