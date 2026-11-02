@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Configure workspace for 1.0.0 release and add sourcier facade by @elcoosp
 - Update metadata, dependencies, and benchmark setup (core) by @elcoosp
+- Expose line starts accessor and optimize vector initialization (core) by @elcoosp
+- Build verified open-addressed index and inline path storage (core) by @elcoosp
 
 ### Changed
 - Remove obsolete clo module (core) by @elcoosp
@@ -19,9 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restructure modules and improve crate-level documentation (core) by @elcoosp
 - Remove obsolete sfm module (core) by @elcoosp
 - Remove obsolete sfp module (core) by @elcoosp
+- Enrich top level documentation mapping memory footprint metrics (core) by @elcoosp
+- Forward parallel compilation flag features to the core library by @elcoosp
 
 ### Documentation
 - Overhaul README with comprehensive documentation and examples by @elcoosp
+- Draft release notes for version 2.0.0 (changelog) by @elcoosp
+- Add performance comparison report from 1.0 to 2.0 (maintainer) by @elcoosp
+- Rewrite specifications targeting zero allocation finalization (readme) by @elcoosp
 
 ### Miscellaneous
 - Overhaul release workflow with manual publishing and git-cliff by @elcoosp
@@ -36,6 +43,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update changelog by @github-actions[bot]
 - Update changelog by @github-actions[bot]
 - Rust 1.99 by @elcoosp
+- Update changelog by @github-actions[bot]
+- Update lockfile dependencies for parallel build benchmarks by @elcoosp
+- Bump workspace version to 2.0.0 by @elcoosp
+- Configure optional rayon dependency requirement (core) by @elcoosp
+- Update changed.txt by @elcoosp
+- Update commit.sh by @elcoosp
+- Rm sh file by @elcoosp
+- Rm chore file by @elcoosp
+
+### Performance
+- Add misses testing tracks and line-col navigation benchmarks (core) by @elcoosp
 
 ### Tests
 - Remove obsolete monolithic tests file (core) by @elcoosp
@@ -51,49 +69,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove obsolete snapshot file (core) by @elcoosp
 - Remove obsolete snapshot file (core) by @elcoosp
 - Remove obsolete snapshot file (core) by @elcoosp
-
-## [2.0.0]
-
-### Added
-- `SourceFilesMap::line_offsets` accessor (view) exposing the per-file `LineOffsets` behind `view`
-- `LineOffsets::line_starts` raw accessor over the per-line byte offsets
-- Opt-in `parallel` feature (rayon) that builds the per-file line-offset indexes across threads
-- New benchmarks: offset-to-(line, col) probes, single-line `view_str` spans and lookup misses
-
-### Changed
-- **Breaking:** serialized `SourceFilesMap` payloads no longer carry the redundant
-  `path_to_id` table; lookup state is derived from the sorted entries and rebuilt on
-  load. v1 payloads that still contain the field deserialize without error and are ignored.
-- Path storage uses short-string optimization: paths up to 30 bytes live inline inside
-  their entry, removing the per-path heap allocation from registration, finalization and
-  lookups; longer paths keep a `Box<str>`.
-- Path-to-id lookups run through a verified open-addressed index (per-map seeded hash,
-  4 bytes per slot, hash-plus-bytes verification) instead of `HashMap<Box<str>, Id>`:
-  no per-file string clones at finalization and about half the lookup-state memory.
-- Per-file line offsets moved from `HashMap<Id, LineOffsets>` to a dense vector indexed
-  by id, removing the hash from the `view` hot path.
-- `LineOffsets::build` scans the content once; the counting pre-pass is gone.
-- `total_bytes` is maintained incrementally and cached at finalization (O(1) queries).
-- Finalization shrinks the entry storage and sizes the lookup index and line-offset
-  vector exactly.
-
-### Fixed
-- Duplicate paths now deterministically keep the first registration: the sort uses the
-  registration sequence number as a tiebreak. Previously `sort_unstable_by` made the
-  surviving content of duplicate paths unspecified for large maps with scattered
-  duplicates; property tests at hundreds-of-files scale now pin the behavior.
-
-### Performance
-- Finalize: -35% (100 files), -28% (500 files), -25% (finalization phase at 2,000 files)
-- `view` extraction: -70% (1,000 multi-line spans)
-- Line-offset construction: -12% single-threaded, plus the opt-in `parallel` feature
-- Path-to-id hits trade ~20% latency for the verified, HashDoS-safe index; misses are
-  as cheap as hits
-
-### Tests
-- Coverage kept at 100% of functions; the suite grew to 104 unit/integration tests plus
-  property, snapshot and doc tests, including the new parallel, SSO-path and wire-format
-  compatibility paths
+- Map sub-component entry configurations for parallel suites (core) by @elcoosp
+- Verify parallel line-offset index construction correctness (core) by @elcoosp
+- Property-test first-registration duplicate tiebreaks (core) by @elcoosp
+- Test wire payload backward compatibility and tolerant reads (core) by @elcoosp
+- Update snapshot file assertions tracking lookup tables removal (core) by @elcoosp
+- Update snapshot file assertions tracking lookup tables removal (core) by @elcoosp
+- Implement test cases checking raw offset ranges accessors (core) by @elcoosp
 
 ## [0.1.0] - 2025-12-19
 
