@@ -17,7 +17,7 @@ fn crafted_oversized_map_json(finalized: bool) -> String {
         }
         let _ = write!(json, "{{\"path\":\"f{index:03}\",\"content\":[120]}}");
     }
-    let _ = write!(json, "],\"path_to_id\":{{}},\"finalized\":{finalized}}}");
+    let _ = write!(json, "],\"finalized\":{finalized}}}");
     json
 }
 
@@ -59,6 +59,62 @@ fn finalized_map_round_trips_with_lookup_state() {
     assert_eq!(rebuilt.get_content(id), Some(&b"fn main() {}\n"[..]));
     assert_eq!(rebuilt.get_content(id), files.get_content(id));
     assert_eq!(rebuilt.iter().count(), 2);
+}
+
+#[test]
+fn serialized_format_omits_redundant_lookup_state() {
+    // The path-to-id table is derived from the sorted files, so v2 payloads
+    // no longer carry it: payloads shrink and deserialized maps can never
+    // hold inconsistent lookup state.
+    let mut files = SourceFilesMap::<u8>::new();
+    files.add_file("a.txt", b"alpha").expect("fits");
+    files.finalize().expect("fits");
+
+    let json = serde_json::to_string(&files).expect("serializable");
+    assert!(
+        !json.contains("path_to_id"),
+        "derived lookup state must not be serialized: {json}"
+    );
+    assert!(json.contains("finalized"), "{json}");
+
+    let rebuilt: SourceFilesMap<u8> = serde_json::from_str(&json).expect("deserializable");
+    assert_eq!(rebuilt.get_id("a.txt"), Some(1));
+}
+
+#[test]
+fn legacy_payloads_with_lookup_state_still_load() {
+    // v1 payloads carried a `path_to_id` table; deserialization stays a
+    // tolerant reader and ignores the redundant field.
+    let legacy = r#"{
+        "files": [{"path": "legacy.txt", "content": [108, 105, 110, 101]}],
+        "path_to_id": {"legacy.txt": 1},
+        "finalized": true
+    }"#;
+    let rebuilt: SourceFilesMap<u8> = serde_json::from_str(legacy).expect("tolerant reader");
+    assert!(rebuilt.is_finalized());
+    let id = rebuilt.get_id("legacy.txt").expect("path indexed");
+    assert_eq!(id, 1);
+    assert_eq!(rebuilt.get_path(1), Some("legacy.txt"));
+    assert_eq!(rebuilt.get_content(1), Some(&b"line"[..]));
+}
+
+#[test]
+fn deserialized_unfinalized_maps_keep_first_registration_wins() {
+    // A deserialized build-phase map can be finalized later; duplicate
+    // resolution must keep the first registration of the serialized order.
+    let mut files = SourceFilesMap::<u8>::new();
+    files.add_file("dup.txt", b"first").expect("fits");
+    files.add_file("z.txt", b"zeta").expect("fits");
+    files.add_file("dup.txt", b"second").expect("fits");
+    files.add_file("a.txt", b"alpha").expect("fits");
+
+    let json = serde_json::to_string(&files).expect("serializable");
+    let mut rebuilt: SourceFilesMap<u8> = serde_json::from_str(&json).expect("deserializable");
+    rebuilt.finalize().expect("fits");
+
+    let id = rebuilt.get_id("dup.txt").expect("present");
+    assert_eq!(rebuilt.get_content(id), Some(&b"first"[..]));
+    assert_eq!(rebuilt.len(), 3);
 }
 
 #[test]
