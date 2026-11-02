@@ -5,7 +5,7 @@
     Register source files once, hand out stable numeric ids and pack every span — file id, line and column — into a single <code>u64</code>. Look paths up in O(1), navigate files byte-accurately, and keep diagnostics positions cheap enough to store by the million. Built for compilers, linters, formatters, language servers and code editors.
   </p>
   <p>
-    <img src="https://img.shields.io/badge/Rust-1.85%2B%20%7C%20Edition%202024-000000?style=flat-square&logo=rust" alt="Rust"/>
+    <img src="https://img.shields.io/badge/Rust-1.99%2B%20%7C%20Edition%202024-000000?style=flat-square&logo=rust" alt="Rust"/>
     <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License MIT"/>
     <img src="https://img.shields.io/crates/v/sourcier?style=flat-square" alt="Crates.io"/>
     <img src="https://img.shields.io/docsrs/sourcier?style=flat-square" alt="docs.rs"/>
@@ -179,7 +179,7 @@ Snapshot tests live in `sourcier-core/src/tests/snapshots/` and are committed to
 
 ## Minimum supported Rust version
 
-Rust 1.85 — the first stable release of edition 2024. The MSRV is verified in CI with `cargo check` across feature configurations.
+Rust 1.99. The MSRV is verified in CI with `cargo check` across feature configurations.
 
 ## Semver policy
 
