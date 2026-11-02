@@ -45,8 +45,4 @@ files:
       - 32
       - 123
       - 125
-path_to_id:
-  README.md: 1
-  src/lib.rs: 2
-  src/main.rs: 3
 finalized: true
