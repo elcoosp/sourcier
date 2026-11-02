@@ -1,0 +1,2604 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 3818d3d..f919ff1 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ - Update changelog by @github-actions[bot]
+ - Logo by @elcoosp
+ - Update changelog by @github-actions[bot]
++- Update changelog by @github-actions[bot]
++- Rust 1.99 by @elcoosp
+ 
+ ### Tests
+ - Remove obsolete monolithic tests file (core) by @elcoosp
+@@ -50,6 +52,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ - Remove obsolete snapshot file (core) by @elcoosp
+ - Remove obsolete snapshot file (core) by @elcoosp
+ 
++## [2.0.0]
++
++### Added
++- `SourceFilesMap::line_offsets` accessor (view) exposing the per-file `LineOffsets` behind `view`
++- `LineOffsets::line_starts` raw accessor over the per-line byte offsets
++- Opt-in `parallel` feature (rayon) that builds the per-file line-offset indexes across threads
++- New benchmarks: offset-to-(line, col) probes, single-line `view_str` spans and lookup misses
++
++### Changed
++- **Breaking:** serialized `SourceFilesMap` payloads no longer carry the redundant
++  `path_to_id` table; lookup state is derived from the sorted entries and rebuilt on
++  load. v1 payloads that still contain the field deserialize without error and are ignored.
++- Path storage uses short-string optimization: paths up to 30 bytes live inline inside
++  their entry, removing the per-path heap allocation from registration, finalization and
++  lookups; longer paths keep a `Box<str>`.
++- Path-to-id lookups run through a verified open-addressed index (per-map seeded hash,
++  4 bytes per slot, hash-plus-bytes verification) instead of `HashMap<Box<str>, Id>`:
++  no per-file string clones at finalization and about half the lookup-state memory.
++- Per-file line offsets moved from `HashMap<Id, LineOffsets>` to a dense vector indexed
++  by id, removing the hash from the `view` hot path.
++- `LineOffsets::build` scans the content once; the counting pre-pass is gone.
++- `total_bytes` is maintained incrementally and cached at finalization (O(1) queries).
++- Finalization shrinks the entry storage and sizes the lookup index and line-offset
++  vector exactly.
++
++### Fixed
++- Duplicate paths now deterministically keep the first registration: the sort uses the
++  registration sequence number as a tiebreak. Previously `sort_unstable_by` made the
++  surviving content of duplicate paths unspecified for large maps with scattered
++  duplicates; property tests at hundreds-of-files scale now pin the behavior.
++
++### Performance
++- Finalize: -35% (100 files), -28% (500 files), -25% (finalization phase at 2,000 files)
++- `view` extraction: -70% (1,000 multi-line spans)
++- Line-offset construction: -12% single-threaded, plus the opt-in `parallel` feature
++- Path-to-id hits trade ~20% latency for the verified, HashDoS-safe index; misses are
++  as cheap as hits
++
++### Tests
++- Coverage kept at 100% of functions; the suite grew to 104 unit/integration tests plus
++  property, snapshot and doc tests, including the new parallel, SSO-path and wire-format
++  compatibility paths
++
+ ## [0.1.0] - 2025-12-19
+ 
+ ### Added
+diff --git a/Cargo.lock b/Cargo.lock
+index 6713e08..c2a624e 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -2,12 +2,109 @@
+ # It is not intended for manual editing.
+ version = 4
+ 
++[[package]]
++name = "aho-corasick"
++version = "1.1.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba"
++dependencies = [
++ "memchr",
++]
++
++[[package]]
++name = "alloca"
++version = "0.4.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e5a7d05ea6aea7e9e64d25b9156ba2fee3fdd659e34e41063cd2fc7cd020d7f4"
++dependencies = [
++ "cc",
++]
++
++[[package]]
++name = "anes"
++version = "0.1.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
++
++[[package]]
++name = "anstyle"
++version = "1.0.14"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
++
++[[package]]
++name = "autocfg"
++version = "1.5.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
++
++[[package]]
++name = "bit-set"
++version = "0.11.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "56d87354e4229f54a44f7bf2435906a4656dba36026ab6eaca629a2c436a691c"
++dependencies = [
++ "bit-vec",
++]
++
++[[package]]
++name = "bit-vec"
++version = "0.10.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5727b15fa97d4f4fee0a3b7c3d550ed0269f54329207b86388de918604e31269"
++dependencies = [
++ "borsh",
++ "serde",
++]
++
+ [[package]]
+ name = "bitflags"
+ version = "2.13.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
+ 
++[[package]]
++name = "borsh"
++version = "1.8.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "553c5d846a6ba5150c65e3b1b8ec073bcf1abc20f9b7220de384a4443ea4e20a"
++dependencies = [
++ "borsh-derive",
++ "bytes",
++ "cfg_aliases",
++]
++
++[[package]]
++name = "borsh-derive"
++version = "1.8.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "12cdfe656708a01f89b451a7d36466e6fe6c414de0aa18fc54f864f6f9ca9f56"
++dependencies = [
++ "once_cell",
++ "proc-macro-crate",
++ "proc-macro2",
++ "quote",
++ "syn 3.0.9",
++]
++
++[[package]]
++name = "bumpalo"
++version = "3.20.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
++
++[[package]]
++name = "bytes"
++version = "1.12.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
++
++[[package]]
++name = "cast"
++version = "0.3.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
++
+ [[package]]
+ name = "cc"
+ version = "1.10.0"
+@@ -24,6 +121,75 @@ version = "1.0.5"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
+ 
++[[package]]
++name = "cfg_aliases"
++version = "0.2.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
++
++[[package]]
++name = "chacha20"
++version = "0.10.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
++dependencies = [
++ "cfg-if",
++ "cpufeatures",
++ "rand_core",
++]
++
++[[package]]
++name = "ciborium"
++version = "0.2.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "42e69ffd6f0917f5c029256a24d0161db17cea3997d185db0d35926308770f0e"
++dependencies = [
++ "ciborium-io",
++ "ciborium-ll",
++ "serde",
++]
++
++[[package]]
++name = "ciborium-io"
++version = "0.2.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "05afea1e0a06c9be33d539b876f1ce3692f4afea2cb41f740e7743225ed1c757"
++
++[[package]]
++name = "ciborium-ll"
++version = "0.2.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "57663b653d948a338bfb3eeba9bb2fd5fcfaecb9e199e87e1eda4d9e8b240fd9"
++dependencies = [
++ "ciborium-io",
++ "half",
++]
++
++[[package]]
++name = "clap"
++version = "4.6.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "aa8876b300ab35ba921adea3dfd70157a46249b33f95c9084ae5709785478946"
++dependencies = [
++ "clap_builder",
++]
++
++[[package]]
++name = "clap_builder"
++version = "4.6.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ec0797fb7aeb1406c84efac526901f7ec3ead2124f946b494e72879d4b54704d"
++dependencies = [
++ "anstyle",
++ "clap_lex",
++]
++
++[[package]]
++name = "clap_lex"
++version = "1.1.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
++
+ [[package]]
+ name = "console"
+ version = "0.16.6"
+@@ -35,6 +201,93 @@ dependencies = [
+  "windows-sys",
+ ]
+ 
++[[package]]
++name = "core_detect"
++version = "1.0.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "7f8f80099a98041a3d1622845c271458a2d73e688351bf3cb999266764b81d48"
++
++[[package]]
++name = "cpufeatures"
++version = "0.3.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
++dependencies = [
++ "libc",
++]
++
++[[package]]
++name = "criterion"
++version = "0.8.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "950046b2aa2492f9a536f5f4f9a3de7b9e2476e575e05bd6c333371add4d98f3"
++dependencies = [
++ "alloca",
++ "anes",
++ "cast",
++ "ciborium",
++ "clap",
++ "criterion-plot",
++ "itertools",
++ "num-traits",
++ "oorandom",
++ "page_size",
++ "plotters",
++ "rayon",
++ "regex",
++ "serde",
++ "serde_json",
++ "tinytemplate",
++ "walkdir",
++]
++
++[[package]]
++name = "criterion-plot"
++version = "0.8.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d8d80a2f4f5b554395e47b5d8305bc3d27813bacb73493eb1001e8f76dae29ea"
++dependencies = [
++ "cast",
++ "itertools",
++]
++
++[[package]]
++name = "crossbeam-deque"
++version = "0.8.8"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "622f3fc73690be383c7214310406f28a90e6edeadc3cea882f9d71e495b9711a"
++dependencies = [
++ "crossbeam-epoch",
++ "crossbeam-utils",
++]
++
++[[package]]
++name = "crossbeam-epoch"
++version = "0.9.21"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "dc74980687109a3b14c72fd458107bf0baa1da1a1a805e178d15501ba9b86d9d"
++dependencies = [
++ "crossbeam-utils",
++]
++
++[[package]]
++name = "crossbeam-utils"
++version = "0.8.23"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
++
++[[package]]
++name = "crunchy"
++version = "0.2.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
++
++[[package]]
++name = "either"
++version = "1.19.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
++
+ [[package]]
+ name = "encode_unicode"
+ version = "1.0.0"
+@@ -69,6 +322,36 @@ version = "0.1.15"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
+ 
++[[package]]
++name = "fnv"
++version = "1.0.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
++
++[[package]]
++name = "futures-core"
++version = "0.3.34"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
++
++[[package]]
++name = "futures-task"
++version = "0.3.34"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd"
++
++[[package]]
++name = "futures-util"
++version = "0.3.34"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc"
++dependencies = [
++ "futures-core",
++ "futures-task",
++ "pin-project-lite",
++ "slab",
++]
++
+ [[package]]
+ name = "getrandom"
+ version = "0.4.3"
+@@ -78,13 +361,19 @@ dependencies = [
+  "cfg-if",
+  "libc",
+  "r-efi",
++ "rand_core",
+ ]
+ 
+ [[package]]
+-name = "glob"
+-version = "0.3.4"
++name = "half"
++version = "2.7.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
++checksum = "6ea2d84b969582b4b1864a92dc5d27cd2b77b622a8d79306834f1be5ba20d84b"
++dependencies = [
++ "cfg-if",
++ "crunchy",
++ "zerocopy",
++]
+ 
+ [[package]]
+ name = "hashbrown"
+@@ -117,12 +406,32 @@ dependencies = [
+  "tempfile",
+ ]
+ 
++[[package]]
++name = "itertools"
++version = "0.13.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
++dependencies = [
++ "either",
++]
++
+ [[package]]
+ name = "itoa"
+ version = "1.0.18"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+ 
++[[package]]
++name = "js-sys"
++version = "0.3.107"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8dc09d2154098bbf4ef54eab6b117a3c24cbbffe94046b16ee6d6d4510584d3a"
++dependencies = [
++ "cfg-if",
++ "futures-util",
++ "wasm-bindgen",
++]
++
+ [[package]]
+ name = "libc"
+ version = "0.2.191"
+@@ -141,12 +450,37 @@ version = "2.8.3"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+ 
++[[package]]
++name = "num-traits"
++version = "0.2.19"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
++dependencies = [
++ "autocfg",
++]
++
+ [[package]]
+ name = "once_cell"
+ version = "1.21.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+ 
++[[package]]
++name = "oorandom"
++version = "11.1.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
++
++[[package]]
++name = "page_size"
++version = "0.6.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "30d5b2194ed13191c1999ae0704b7839fb18384fa22e49b57eeaa97d79ce40da"
++dependencies = [
++ "libc",
++ "winapi",
++]
++
+ [[package]]
+ name = "pest"
+ version = "2.9.5"
+@@ -178,7 +512,7 @@ dependencies = [
+  "pest_meta",
+  "proc-macro2",
+  "quote",
+- "syn",
++ "syn 3.0.9",
+ ]
+ 
+ [[package]]
+@@ -200,6 +534,49 @@ dependencies = [
+  "stacker",
+ ]
+ 
++[[package]]
++name = "pin-project-lite"
++version = "0.2.17"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
++
++[[package]]
++name = "plotters"
++version = "0.3.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5aeb6f403d7a4911efb1e33402027fc44f29b5bf6def3effcc22d7bb75f2b747"
++dependencies = [
++ "num-traits",
++ "plotters-backend",
++ "plotters-svg",
++ "wasm-bindgen",
++ "web-sys",
++]
++
++[[package]]
++name = "plotters-backend"
++version = "0.3.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "df42e13c12958a16b3f7f4386b9ab1f3e7933914ecea48da7139435263a4172a"
++
++[[package]]
++name = "plotters-svg"
++version = "0.3.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "51bae2ac328883f7acdfea3d66a7c35751187f870bc81f94563733a154d7a670"
++dependencies = [
++ "plotters-backend",
++]
++
++[[package]]
++name = "proc-macro-crate"
++version = "3.5.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
++dependencies = [
++ "toml_edit",
++]
++
+ [[package]]
+ name = "proc-macro2"
+ version = "1.0.107"
+@@ -209,6 +586,26 @@ dependencies = [
+  "unicode-ident",
+ ]
+ 
++[[package]]
++name = "proptest"
++version = "1.12.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b8530004ccb15eae51c7e40009fbe317f341f804db54dc033eec1c50be28cfa0"
++dependencies = [
++ "bit-set",
++ "bit-vec",
++ "bitflags",
++ "chacha20",
++ "core_detect",
++ "num-traits",
++ "rand",
++ "rand_xorshift",
++ "regex-syntax",
++ "rusty-fork",
++ "tempfile",
++ "unarray",
++]
++
+ [[package]]
+ name = "psm"
+ version = "0.1.24"
+@@ -218,6 +615,12 @@ dependencies = [
+  "cc",
+ ]
+ 
++[[package]]
++name = "quick-error"
++version = "1.2.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
++
+ [[package]]
+ name = "quote"
+ version = "1.0.47"
+@@ -233,6 +636,80 @@ version = "6.0.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
+ 
++[[package]]
++name = "rand"
++version = "0.10.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "65c9fb96cbc91e3478eaae79a69fcd3f1ae4ad052e471fe6732fff548984b4af"
++dependencies = [
++ "getrandom",
++ "rand_core",
++]
++
++[[package]]
++name = "rand_core"
++version = "0.10.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
++
++[[package]]
++name = "rand_xorshift"
++version = "0.5.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "60aa6af80be32871323012e02e6e65f8a7cc7890931ae421d217ad8fe0df2ccf"
++dependencies = [
++ "rand_core",
++]
++
++[[package]]
++name = "rayon"
++version = "1.12.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d"
++dependencies = [
++ "either",
++ "rayon-core",
++]
++
++[[package]]
++name = "rayon-core"
++version = "1.13.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
++dependencies = [
++ "crossbeam-deque",
++ "crossbeam-utils",
++]
++
++[[package]]
++name = "regex"
++version = "1.13.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f020237b6c8eed93db2e2cb53c00c60a8e1bc73da7d073199a1180401450218d"
++dependencies = [
++ "aho-corasick",
++ "memchr",
++ "regex-automata",
++ "regex-syntax",
++]
++
++[[package]]
++name = "regex-automata"
++version = "0.4.18"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ad8553b9b26413251cbf30e620595c7a41b3887f03da04579c0e6b0d6a06b4b2"
++dependencies = [
++ "aho-corasick",
++ "memchr",
++ "regex-syntax",
++]
++
++[[package]]
++name = "regex-syntax"
++version = "0.8.11"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
++
+ [[package]]
+ name = "rustix"
+ version = "1.1.6"
+@@ -246,6 +723,33 @@ dependencies = [
+  "windows-sys",
+ ]
+ 
++[[package]]
++name = "rustversion"
++version = "1.0.23"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
++
++[[package]]
++name = "rusty-fork"
++version = "0.3.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "cc6bf79ff24e648f6da1f8d1f011e9cac26491b619e6b9280f2b47f1774e6ee2"
++dependencies = [
++ "fnv",
++ "quick-error",
++ "tempfile",
++ "wait-timeout",
++]
++
++[[package]]
++name = "same-file"
++version = "1.0.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
++dependencies = [
++ "winapi-util",
++]
++
+ [[package]]
+ name = "serde"
+ version = "1.0.229"
+@@ -273,7 +777,7 @@ checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
+ dependencies = [
+  "proc-macro2",
+  "quote",
+- "syn",
++ "syn 3.0.9",
+ ]
+ 
+ [[package]]
+@@ -289,15 +793,6 @@ dependencies = [
+  "zmij",
+ ]
+ 
+-[[package]]
+-name = "serde_spanned"
+-version = "1.1.2"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "4e7523beb55eece201a2356bee0bbca0d1ab466c14c07703b2e0ee6d42cb0c2c"
+-dependencies = [
+- "serde_core",
+-]
+-
+ [[package]]
+ name = "shlex"
+ version = "2.0.1"
+@@ -310,14 +805,31 @@ version = "2.7.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
+ 
++[[package]]
++name = "slab"
++version = "0.4.12"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
++
++[[package]]
++name = "sourcier"
++version = "2.0.0"
++dependencies = [
++ "sourcier-core",
++]
++
+ [[package]]
+ name = "sourcier-core"
+-version = "0.1.0"
++version = "2.0.0"
+ dependencies = [
++ "criterion",
+  "insta",
+  "memchr",
++ "proptest",
++ "rayon",
+  "serde",
+- "trybuild",
++ "serde_json",
++ "thiserror",
+ ]
+ 
+ [[package]]
+@@ -335,9 +847,9 @@ dependencies = [
+ 
+ [[package]]
+ name = "syn"
+-version = "3.0.9"
++version = "2.0.119"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "d78c8dee4c7bf0e14673097256fed6142ce9d3b85a408189d07482442145823b"
++checksum = "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297"
+ dependencies = [
+  "proc-macro2",
+  "quote",
+@@ -345,10 +857,15 @@ dependencies = [
+ ]
+ 
+ [[package]]
+-name = "target-tuple"
+-version = "1.0.2"
++name = "syn"
++version = "3.0.9"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "876fef147edbcbddc8ac5cbbba92c7b86519e314e86638596c09673b2ed01e7f"
++checksum = "d78c8dee4c7bf0e14673097256fed6142ce9d3b85a408189d07482442145823b"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "unicode-ident",
++]
+ 
+ [[package]]
+ name = "tempfile"
+@@ -364,27 +881,33 @@ dependencies = [
+ ]
+ 
+ [[package]]
+-name = "termcolor"
+-version = "1.4.1"
++name = "thiserror"
++version = "2.0.21"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
++checksum = "09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e"
+ dependencies = [
+- "winapi-util",
++ "thiserror-impl",
+ ]
+ 
+ [[package]]
+-name = "toml"
+-version = "1.1.8+spec-1.1.0"
++name = "thiserror-impl"
++version = "2.0.21"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "20489e00e4d8741d6be680764cc12e270655e375a20d1011e844a9c3379e678d"
++checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
+ dependencies = [
+- "indexmap",
+- "serde_core",
+- "serde_spanned",
+- "toml_datetime",
+- "toml_parser",
+- "toml_writer",
+- "winnow",
++ "proc-macro2",
++ "quote",
++ "syn 3.0.9",
++]
++
++[[package]]
++name = "tinytemplate"
++version = "1.2.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
++dependencies = [
++ "serde",
++ "serde_json",
+ ]
+ 
+ [[package]]
+@@ -397,33 +920,24 @@ dependencies = [
+ ]
+ 
+ [[package]]
+-name = "toml_parser"
+-version = "1.1.5+spec-1.1.0"
++name = "toml_edit"
++version = "0.25.17+spec-1.1.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "baa693a8032d7e1cada7d0041e96126df243179ff061456783ac7f12bda4744c"
++checksum = "e3641d5bbb5349a79e1020a242d251efbc546ad8048d133958323ce9c40a9c9c"
+ dependencies = [
++ "indexmap",
++ "toml_datetime",
++ "toml_parser",
+  "winnow",
+ ]
+ 
+ [[package]]
+-name = "toml_writer"
+-version = "1.1.3+spec-1.1.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770"
+-
+-[[package]]
+-name = "trybuild"
+-version = "1.0.122"
++name = "toml_parser"
++version = "1.1.5+spec-1.1.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "62db9c92d704393fbf2132041720cc80b689f2d3f28521015c2ac866223c11b8"
++checksum = "baa693a8032d7e1cada7d0041e96126df243179ff061456783ac7f12bda4744c"
+ dependencies = [
+- "glob",
+- "serde",
+- "serde_derive",
+- "serde_json",
+- "target-tuple",
+- "termcolor",
+- "toml",
++ "winnow",
+ ]
+ 
+ [[package]]
+@@ -432,12 +946,107 @@ version = "0.1.7"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
+ 
++[[package]]
++name = "unarray"
++version = "0.1.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
++
+ [[package]]
+ name = "unicode-ident"
+ version = "1.0.27"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
+ 
++[[package]]
++name = "wait-timeout"
++version = "0.2.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
++dependencies = [
++ "libc",
++]
++
++[[package]]
++name = "walkdir"
++version = "2.5.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
++dependencies = [
++ "same-file",
++ "winapi-util",
++]
++
++[[package]]
++name = "wasm-bindgen"
++version = "0.2.130"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a0181c14ddd6c7b8b0b0132a5f1ea2f32be0d893cd3ea97b6e3b28886b8a3d1c"
++dependencies = [
++ "cfg-if",
++ "rustversion",
++ "wasm-bindgen-macro",
++ "wasm-bindgen-shared",
++]
++
++[[package]]
++name = "wasm-bindgen-macro"
++version = "0.2.130"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "6e931a02a39abdbf66966fc35902b5ed58344750a70885bed4ebb3d8eaf28ed9"
++dependencies = [
++ "quote",
++ "wasm-bindgen-macro-support",
++]
++
++[[package]]
++name = "wasm-bindgen-macro-support"
++version = "0.2.130"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2ca4b54280e455bd831e33a6b8e734baf432fe63fbc35c42ac14ce67a043a53a"
++dependencies = [
++ "bumpalo",
++ "proc-macro2",
++ "quote",
++ "syn 3.0.9",
++ "wasm-bindgen-shared",
++]
++
++[[package]]
++name = "wasm-bindgen-shared"
++version = "0.2.130"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3b1f9c3798725016c6ee5f2f57869ec0831e8bbc0ab0310a86e787e97f41389e"
++dependencies = [
++ "unicode-ident",
++]
++
++[[package]]
++name = "web-sys"
++version = "0.3.107"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d7d179596ff5ec0f6de4db64d54011bde6289cc49603d3a6e4ce3f329207ab88"
++dependencies = [
++ "js-sys",
++ "wasm-bindgen",
++]
++
++[[package]]
++name = "winapi"
++version = "0.3.9"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5c839a674fcd7a98952e593242ea400abe93992746761e38641405d28b00f419"
++dependencies = [
++ "winapi-i686-pc-windows-gnu",
++ "winapi-x86_64-pc-windows-gnu",
++]
++
++[[package]]
++name = "winapi-i686-pc-windows-gnu"
++version = "0.4.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
++
+ [[package]]
+ name = "winapi-util"
+ version = "0.1.11"
+@@ -447,6 +1056,12 @@ dependencies = [
+  "windows-sys",
+ ]
+ 
++[[package]]
++name = "winapi-x86_64-pc-windows-gnu"
++version = "0.4.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
++
+ [[package]]
+ name = "windows-link"
+ version = "0.2.1"
+@@ -467,6 +1082,29 @@ name = "winnow"
+ version = "1.0.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
++dependencies = [
++ "memchr",
++]
++
++[[package]]
++name = "zerocopy"
++version = "0.8.63"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e5fe1f8f1b06191a00962174c61aa5005e0bb391a6d80d07e24d115c01a92ed8"
++dependencies = [
++ "zerocopy-derive",
++]
++
++[[package]]
++name = "zerocopy-derive"
++version = "0.8.63"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "863ad3ac83293fb4d740aedbfdc9240dd8d1a50c1099acd76ce80ce7c7230c7f"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 2.0.119",
++]
+ 
+ [[package]]
+ name = "zmij"
+diff --git a/Cargo.toml b/Cargo.toml
+index 855e167..06bc134 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -3,7 +3,7 @@ members = ["sourcier-core"]
+ resolver = "3"
+ 
+ [workspace.package]
+-version = "1.0.0"
++version = "2.0.0"
+ edition = "2024"
+ rust-version = "1.99"
+ license = "MIT"
+@@ -13,6 +13,7 @@ authors = ["elcoosp"]
+ 
+ [workspace.dependencies]
+ memchr = "2.7"
++rayon = "1.10"
+ serde = { version = "1.0", features = ["derive"] }
+ thiserror = "2.0"
+ insta = { version = "1.43", features = ["yaml", "redactions"] }
+@@ -53,9 +54,10 @@ default = ["serde", "view", "rt-feedback"]
+ serde = ["sourcier-core/serde"]
+ view = ["sourcier-core/view"]
+ rt-feedback = ["sourcier-core/rt-feedback"]
++parallel = ["sourcier-core/parallel"]
+ 
+ [dependencies]
+-sourcier-core = { path = "sourcier-core", version = "1.0.0" }
++sourcier-core = { path = "sourcier-core", version = "2.0.0" }
+ 
+ [lints]
+ workspace = true
+diff --git a/PERFORMANCE.md b/PERFORMANCE.md
+new file mode 100644
+index 0000000..e5e7e02
+--- /dev/null
++++ b/PERFORMANCE.md
+@@ -0,0 +1,69 @@
++# Performance report: sourcier 1.0 → 2.0
++
++All numbers were measured with the bundled criterion suite on the reference
++machine (shared 2-core CI sandbox, x86_64). 1.0 and 2.0 were measured
++back-to-back in the same machine window with identical criterion settings
++(`--warm-up-time 2 --measurement-time 4`), and criterion computed the change
++intervals between the paired runs (`--save-baseline` / `--baseline`).
++Treat the numbers as indicative for this class of hardware.
++
++## Results
++
++| Scenario                                          | 1.0       | 2.0       | Change        |
++| ------------------------------------------------- | --------- | --------- | ------------- |
++| `finalize/100_files_50_lines` (add + finalize)    | 63.9 µs   | 41.3 µs   | **−35.3%**    |
++| `finalize/500_files_100_lines` (add + finalize)   | 708.6 µs  | 513.0 µs  | **−27.5%**    |
++| Finalization phase only, 2,000 × 200 lines        | 3.72 ms   | 2.77 ms   | **−25.5%**    |
++| `get_id/2000_files` (2,000 hits)                  | 33.8 µs   | 41.0 µs   | +21.5% ¹      |
++| `get_id/2000_misses` (2,000 misses)               | —         | 32.9 µs   | new           |
++| `view/1000_files_multi_line` (1,000 spans)        | 14.4 µs   | 4.4 µs    | **−69.9%**    |
++| `line_offsets/100x1000_lines` (100 scans)         | 784 µs    | 687 µs    | **−12.4%**    |
++| `line_col/1000_probes` (offset → line, col)       | —         | 8.15 µs   | new           |
++| `view_str/single_line_span`                       | —         | 257 ns    | new           |
++
++¹ The verified path index trades ~20% hit latency for byte-exact
++verification, HashDoS-resistant per-map seeding, zero allocations at
++finalization and about half the lookup-state memory. Misses terminate on the
++first empty slot and are as cheap as hits.
++
++## Where the wins come from
++
++1. **Single-pass line-offset scan.** 1.0 scanned every file twice (a counting
++   pre-pass followed by the build pass). 2.0 scans once into a heuristically
++   reserved vector. The line-offset scan dominates finalization for realistic
++   files (profiling the 1.0 build showed ~78% of `finalize` time inside the
++   scan), so halving its memory traffic is the single largest win.
++2. **Zero-allocation finalization.** 1.0 cloned every path into a
++   `HashMap<Box<str>, Id>` (one heap allocation per file). 2.0 stores paths
++   inline up to 30 bytes (short-string optimization) and builds a verified
++   open-addressed index of 4-byte slots — no per-path allocation at all.
++3. **Dense per-id line-offset storage.** 1.0 kept `HashMap<Id, LineOffsets>`;
++   every `view` call hashed the id. 2.0 uses a `Vec<Option<LineOffsets>>`
++   indexed by id — `view` is a bounds check plus an offset lookup.
++4. **Parallel index construction (opt-in `parallel` feature).** Spreads the
++   line-offset scan across threads with rayon. On the 2-core reference VM the
++   thread-pool overhead outweighed the scan savings (which is why the feature
++   is opt-in); on many-core build machines with thousands of files it scales
++   the dominant finalization phase.
++5. **Registration-order tiebreak in the sort.** Fixes duplicate-resolution
++   determinism (see the changelog) without changing sort complexity.
++
++## Lookup index design notes
++
++- The index is an open-addressed table sized to at least twice the entry
++  count (load factor ≤ 0.5, linear probing, measured average 1.48 probes per
++  successful lookup at 2,000 files).
++- The hash is an Fx-style multiply-xor mix running on two independent
++  accumulation chains, seeded per map from `RandomState` so adversarial
++  collision patterns cannot be precomputed.
++- Every probe verifies the stored hash **and** the path bytes, so hash
++  collisions can never produce a wrong id — correctness does not depend on
++  hash quality.
++
++## Reproducing
++
++```sh
++cargo bench -p sourcier-core --bench map -- --save-baseline myrun
++# after any change:
++cargo bench -p sourcier-core --bench map -- --baseline myrun
++```
+diff --git a/README.md b/README.md
+index 98c06cf..20dddb1 100644
+--- a/README.md
++++ b/README.md
+@@ -12,7 +12,7 @@
+     <img src="https://img.shields.io/badge/Crates-2-6F4E37?style=flat-square" alt="Crates"/>
+     <img src="https://img.shields.io/badge/Spans-one%20u64-FF4500?style=flat-square" alt="Spans"/>
+     <img src="https://img.shields.io/badge/File%20Ids-u8%20%7C%20u16-4B32C3?style=flat-square" alt="File Ids"/>
+-    <img src="https://img.shields.io/badge/Features-serde%20%7C%20view%20%7C%20rt--feedback-00BFFF?style=flat-square" alt="Features"/>
++    <img src="https://img.shields.io/badge/Features-serde%20%7C%20view%20%7C%20rt--feedback%20%7C%20parallel-00BFFF?style=flat-square" alt="Features"/>
+     <img src="https://img.shields.io/badge/Unsafe-forbidden-8B0000?style=flat-square" alt="Unsafe"/>
+     <img src="https://img.shields.io/badge/Tests-cargo%20nextest-007ACC?style=flat-square" alt="Tests"/>
+     <img src="https://img.shields.io/badge/Coverage-100%25%20functions-brightgreen?style=flat-square" alt="Coverage"/>
+@@ -28,7 +28,9 @@
+ 
+ - **One `u64` per span.** File id, start line, start column, end line and end column are bit-packed together. Positions are `Copy`, cache-friendly, order naturally as integers and survive serialization round trips bit-exactly.
+ - **Constant-time lookups.** After finalization, path to id, id to path and id to content are all O(1); line and column navigation is O(log n).
+-- **Deterministic ids.** Finalizing sorts files by path, deduplicates registrations and assigns one-based ids, so the same set of files always produces the same ids.
++- **Zero-allocation finalization.** Paths up to 30 bytes live inline inside their entry (short-string optimization), so registering and finalizing typical source trees performs no per-path heap allocation at all.
++- **Verified, HashDoS-safe path index.** A per-map seeded open-addressed index maps paths to entries with 4 bytes per slot; every probe is verified against the stored path bytes, so collisions can never produce a wrong answer and adversarial keys cannot be precomputed.
++- **Deterministic ids.** Finalizing sorts files by path (with a registration-order tiebreak), deduplicates registrations and assigns one-based ids, so the same set of files always produces the same ids — and the first registration of a duplicate path always wins, even for hundreds of duplicates.
+ - **Byte-accurate views.** With the `view` feature, a position resolves to the exact bytes it covers — including multi-line spans, line terminators and zero-width spans.
+ - **Typed, sealed API.** The `FileId` trait is sealed (`u8` and `u16` only), error enums are `#[non_exhaustive]`, and the packed layouts are documented so raw values can be persisted safely.
+ - **No unsafe code.** The whole workspace is `#![forbid(unsafe_code)]`.
+@@ -37,7 +39,7 @@
+ 
+ ```toml
+ [dependencies]
+-sourcier = "1.0"
++sourcier = "2.0"
+ ```
+ 
+ Or track the repository directly:
+@@ -109,11 +111,12 @@ Positions are stable `u64` encodings. The table shows the bit range of each fiel
+ 
+ All features are enabled by default and forwarded to `sourcier-core`.
+ 
+-| Feature       | Default | Description                                                     |
+-| ------------- | ------- | --------------------------------------------------------------- |
+-| `serde`       | yes     | `Serialize`/`Deserialize` for maps, positions and line indexes. |
+-| `view`        | yes     | Line offset indexes plus `view`/`view_str` byte extraction.     |
+-| `rt-feedback` | yes     | Lock-free shared usage statistics (`RuntimeFeedback`).          |
++| Feature       | Default | Description                                                                      |
++| ------------- | ------- | -------------------------------------------------------------------------------- |
++| `serde`       | yes     | `Serialize`/`Deserialize` for maps, positions and line indexes.                  |
++| `view`        | yes     | Line offset indexes plus `view`/`view_str` byte extraction.                      |
++| `rt-feedback` | yes     | Lock-free shared usage statistics (`RuntimeFeedback`).                           |
++| `parallel`    | no      | Multi-threaded line-offset index construction with `rayon` for huge file sets.   |
+ 
+ Trim them for a leaner build:
+ 
+@@ -133,24 +136,34 @@ sourcier = { version = "1.0", default-features = false, features = ["view"] }
+ | `SourceFilePosition`              | Uniform accessor trait over both position kinds.                |
+ | `LineOffsets` (`view`)            | Compact per-line byte offset index with line/col mapping.       |
+ | `RuntimeFeedback` (`rt-feedback`) | Atomic counters shared across maps via `Arc`.                   |
++| `line_offsets` (`view`)           | Accessor over the per-file index behind `view`.                 |
+ | `MapError`, `PositionError`       | Typed, `non_exhaustive` error enums.                            |
+ 
+ ## Performance
+ 
+-Measured with the bundled criterion suite (`cargo bench -p sourcier-core`); treat the numbers as indicative:
++Measured with the bundled criterion suite (`cargo bench -p sourcier-core`) on the reference machine, comparing 2.0 against the 1.0 baseline in the same measurement window; treat the numbers as indicative:
+ 
+-| Scenario                                | Time    |
+-| --------------------------------------- | ------- |
+-| Finalize 2,000 files x 200 lines        | ~5.6 ms |
+-| 2,000 path-to-id lookups (one per file) | ~34 us  |
+-| 1,000 multi-line `view` extractions     | ~13 us  |
+-| Line offsets for 100 files x 1,000 lines| ~0.8 ms |
++| Scenario                                  | 1.0      | 2.0      | Change      |
++| ----------------------------------------- | -------- | -------- | ----------- |
++| Finalize 100 files x 50 lines             | ~64 us   | ~41 us   | **-35%**    |
++| Finalize 500 files x 100 lines            | ~709 us  | ~513 us  | **-28%**    |
++| Finalize phase only, 2,000 x 200 lines    | ~3.7 ms  | ~2.8 ms  | **-25%**    |
++| 1,000 multi-line `view` extractions       | ~14.4 us | ~4.4 us  | **-70%**    |
++| Line offsets for 100 files x 1,000 lines  | ~0.79 ms | ~0.69 ms | **-12%**    |
++| 1,000 offset-to-(line, col) probes        | -        | ~8.2 us  | new         |
++| Single-line `view_str` span               | -        | ~257 ns  | new         |
++| 2,000 path-to-id lookups (hits)           | ~34 us   | ~41 us   | see note    |
++| 2,000 path-to-id lookups (misses)         | -        | ~33 us   | new         |
++
++The 2.0 path-to-id index trades a small amount of hit latency (~20%) for byte-exact verification, HashDoS-resistant per-map seeding, zero allocations at finalization and roughly half the lookup-state memory. Hits and misses both terminate on the first empty slot, so misses are as cheap as hits.
+ 
+ Design notes:
+ 
+-- Finalization is a single `sort_unstable` plus one O(n) pass; file contents are never copied during finalization.
+-- Line offsets use `memchr`-accelerated newline scanning and 4 bytes per line (`u32` offsets, files up to 4 GiB).
+-- Path and content storage use `Box<str>`/`Box<[u8]>` to keep per-file overhead minimal.
++- Finalization is a single unstable sort with a registration-order tiebreak plus one O(n) pass; file contents are never copied during finalization, and no per-path string allocation happens (inline paths up to 30 bytes, `Box<str>` beyond).
++- Line offsets use a single `memchr`-accelerated scan (the 1.0 counting pre-pass is gone) and 4 bytes per line (`u32` offsets, files up to 4 GiB); opt into `parallel` to spread the scan across cores with `rayon` on many-core build machines (on a 2-core reference VM the thread-pool overhead outweighed the scan savings, which is why the feature is opt-in).
++- Lookups run through a verified open-addressed index: seeded Fx-style hashing, linear probing at a load factor of 0.5, and hash-plus-bytes verification so any collision pattern still resolves exactly.
++- Per-file line offsets live in a dense `Vec<Option<LineOffsets>>` indexed by id — `view` pays no hashing on its hot path.
++- Serialized map payloads carry only the raw entries and the phase flag; lookup state is rebuilt on load (v1 payloads with the redundant `path_to_id` table still deserialize).
+ - `rt-feedback` uses atomics only; no locks are taken on the reporting path.
+ 
+ ## Testing and verification
+@@ -172,8 +185,9 @@ Snapshot tests live in `sourcier-core/src/tests/snapshots/` and are committed to
+ 
+ > [!NOTE]
+ > Property tests pin the round trips (position encoding, line/col to offset
+-> inverse mapping, map lookup consistency) against hundreds of generated
+-> cases, including adversarial deserialized maps that exceed the id capacity.
++> inverse mapping, map lookup consistency, first-registration-wins duplicate
++> resolution at hundreds-of-files scale) against hundreds of generated cases,
++> including adversarial deserialized maps that exceed the id capacity.
+ > The 4 GiB line-offset limit is exercised end to end with lazily committed
+ > allocations, so the oversized-file paths are tested for real.
+ 
+@@ -183,4 +197,6 @@ Rust 1.99. The MSRV is verified in CI with `cargo check` across feature configur
+ 
+ ## Semver policy
+ 
+-This release is 1.0.0: the public API documented on docs.rs is stable and follows semantic versioning. Error enums are `#[non_exhaustive]`, the `FileId` trait is sealed, and the packed `u64` layouts are documented so raw values can be persisted.
++This release is 2.0.0: the public API documented on docs.rs is stable and follows semantic versioning. Error enums are `#[non_exhaustive]`, the `FileId` trait is sealed, and the packed `u64` layouts are documented so raw values can be persisted.
++
++The 2.0 wire format of `SourceFilesMap` dropped the redundant `path_to_id` table (it is derived from the sorted entries and rebuilt on load); 1.0 payloads that still carry the field deserialize without error and are ignored.
+diff --git a/sourcier-core/Cargo.toml b/sourcier-core/Cargo.toml
+index 2dd2f55..6a5380a 100644
+--- a/sourcier-core/Cargo.toml
++++ b/sourcier-core/Cargo.toml
+@@ -16,10 +16,12 @@ authors.workspace = true
+ rt-feedback = []
+ serde = ["dep:serde"]
+ view = []
++parallel = ["dep:rayon"]
+ default = ["serde", "view", "rt-feedback"]
+ 
+ [dependencies]
+ memchr = { workspace = true }
++rayon = { workspace = true, optional = true }
+ serde = { workspace = true, optional = true }
+ thiserror = { workspace = true }
+ 
+diff --git a/sourcier-core/benches/map.rs b/sourcier-core/benches/map.rs
+index 071a54d..0e027c8 100644
+--- a/sourcier-core/benches/map.rs
++++ b/sourcier-core/benches/map.rs
+@@ -23,6 +23,17 @@ fn build_files(n: usize, lines_per_file: usize) -> Vec<(String, Vec<u8>)> {
+         .collect()
+ }
+ 
++/// Builds a finalized map over `entries`.
++fn build_map(entries: &[(String, Vec<u8>)]) -> SourceFilesMap<u16> {
++    let mut map = SourceFilesMap::<u16>::with_capacity(entries.len());
++    for (path, content) in entries {
++        map.add_file(path.as_str(), content.as_slice())
++            .expect("fits");
++    }
++    map.finalize().expect("fits");
++    map
++}
++
+ fn bench_finalize(c: &mut Criterion) {
+     let mut group = c.benchmark_group("finalize");
+     for (files, lines) in [(100_usize, 50_usize), (500, 100), (2_000, 200)] {
+@@ -48,12 +59,7 @@ fn bench_finalize(c: &mut Criterion) {
+ 
+ fn bench_get_id(c: &mut Criterion) {
+     let entries = build_files(2_000, 100);
+-    let mut map = SourceFilesMap::<u16>::new();
+-    for (path, content) in &entries {
+-        map.add_file(path.as_str(), content.as_slice())
+-            .expect("fits");
+-    }
+-    map.finalize().expect("fits");
++    let map = build_map(&entries);
+     let paths: Vec<&str> = entries.iter().map(|(p, _)| p.as_str()).collect();
+ 
+     c.bench_function("get_id/2000_files", |b| {
+@@ -63,18 +69,24 @@ fn bench_get_id(c: &mut Criterion) {
+             }
+         });
+     });
++
++    // Every lookup misses: probes to the first empty slot of each bucket.
++    let misses: Vec<String> = paths.iter().map(|path| format!("{path}.miss")).collect();
++    let misses: Vec<&str> = misses.iter().map(String::as_str).collect();
++    c.bench_function("get_id/2000_misses", |b| {
++        b.iter(|| {
++            for path in black_box(&misses) {
++                black_box(map.get_id(path));
++            }
++        });
++    });
+ }
+ 
+ fn bench_view(c: &mut Criterion) {
+     #[cfg(feature = "view")]
+     {
+         let entries = build_files(1_000, 200);
+-        let mut map = SourceFilesMap::<u16>::new();
+-        for (path, content) in &entries {
+-            map.add_file(path.as_str(), content.as_slice())
+-                .expect("fits");
+-        }
+-        map.finalize().expect("fits");
++        let map = build_map(&entries);
+         let ids: Vec<_> = (0..1_000)
+             .map(|i| {
+                 map.get_id(format!("src/module_{i:04}.rs").as_str())
+@@ -108,6 +120,27 @@ fn bench_line_offsets(c: &mut Criterion) {
+             }
+         });
+     });
++
++    // LSP-style offset to (line, column) navigation.
++    let (_, content) = &entries[0];
++    let offsets = sourcier_core::LineOffsets::compute(content).expect("fits");
++    let probes: Vec<usize> = (0..1_000).map(|i| i * (content.len() / 1_000)).collect();
++    c.bench_function("line_col/1000_probes", |b| {
++        b.iter(|| {
++            for offset in black_box(&probes) {
++                black_box(offsets.line_col_from_offset(*offset).expect("in range"));
++            }
++        });
++    });
++
++    let map = build_map(&entries);
++    let id = map.get_id("src/module_0000.rs").expect("present");
++    let pos = AbsolutePosition::new(id, 500, 1, 900, 30);
++    c.bench_function("view_str/single_line_span", |b| {
++        b.iter(|| {
++            black_box(map.view_str(id, &pos).expect("valid position"));
++        });
++    });
+ }
+ 
+ #[cfg(not(feature = "view"))]
+diff --git a/sourcier-core/src/lib.rs b/sourcier-core/src/lib.rs
+index af930d9..a8882fc 100644
+--- a/sourcier-core/src/lib.rs
++++ b/sourcier-core/src/lib.rs
+@@ -33,20 +33,27 @@
+ //!
+ //! # Feature flags
+ //!
+-//! | Feature       | Default | Description                                          |
+-//! |---------------|---------|------------------------------------------------------|
++//! | Feature       | Default | Description                                            |
++//! |---------------|---------|--------------------------------------------------------|
+ //! | `serde`       | yes     | Serialization support for maps and positions.        |
+ //! | `view`        | yes     | Line offset indexes plus `view`/`view_str` lookups.  |
+ //! | `rt-feedback` | yes     | Lock-free shared usage statistics (`RuntimeFeedback`). |
++//! | `parallel`    | no      | Multi-threaded line-offset index construction (rayon). |
+ //!
+ //! # Performance characteristics
+ //!
+ //! - Positions are single `u64` values: `Copy`, cache-friendly and free to
+ //!   store by value.
+ //! - Id, path and content lookups are O(1); line offset lookup is O(log n).
+-//! - Finalization is a single O(n log n) sort plus one O(n) pass; no content
+-//!   is copied during finalization.
+-//! - Line offsets use `memchr`-accelerated scanning and 4 bytes per line.
++//! - Finalization is a single unstable sort (with a registration-order
++//!   tiebreak) plus one O(n) pass; no content is copied and no per-path
++//!   string is allocated (paths up to 30 bytes are stored inline).
++//! - Path lookups run through a verified open-addressed index: per-map
++//!   seeded hashing, 4 bytes per slot and hash-plus-bytes verification.
++//! - Line offsets use a single `memchr`-accelerated scan and 4 bytes per
++//!   line; the `parallel` feature spreads the scan across threads.
++//! - Serialized map payloads carry only the raw entries and the phase flag;
++//!   lookup state is derived and rebuilt on load.
+ //!
+ //! # Limits
+ //!
+diff --git a/sourcier-core/src/line_map.rs b/sourcier-core/src/line_map.rs
+index c2cd2ba..6a6a16e 100644
+--- a/sourcier-core/src/line_map.rs
++++ b/sourcier-core/src/line_map.rs
+@@ -57,8 +57,15 @@ impl LineOffsets {
+     }
+ 
+     /// Builds the offset index of pre-validated content.
++    ///
++    /// A single `memchr` pass fills the offset vector: the counting pre-pass
++    /// of previous versions doubled the memory traffic of the hottest
++    /// finalization phase for no gain, since amortized growth of the vector
++    /// is far cheaper than a second SIMD scan of the whole content.
+     fn build(content: &[u8], content_length: usize) -> Self {
+-        let mut offsets = Vec::with_capacity(memchr::memchr_iter(b'\n', content).count() + 1);
++        // Typical source files average 30-60 bytes per line; the heuristic
++        // keeps reallocation rare without scanning the content twice.
++        let mut offsets = Vec::with_capacity(content.len() / 32 + 8);
+         offsets.push(0_u32);
+         offsets.extend(memchr::memchr_iter(b'\n', content).map(|pos| (pos + 1) as u32));
+         Self {
+@@ -79,6 +86,16 @@ impl LineOffsets {
+         self.content_length
+     }
+ 
++    /// Returns the raw byte offsets at which every line starts.
++    ///
++    /// The returned slice always starts with `0` and has exactly
++    /// [`line_count`](Self::line_count) entries; it is exposed so callers can
++    /// reuse the offsets in their own fast paths without re-scanning files.
++    #[inline]
++    pub fn line_starts(&self) -> &[u32] {
++        &self.offsets
++    }
++
+     /// Returns the half-open byte range of `line` (one-based), excluding the
+     /// terminating newline.
+     #[inline]
+@@ -99,6 +116,7 @@ impl LineOffsets {
+     ///
+     /// An offset equal to the content length maps to the last column of the
+     /// last line.
++    #[inline]
+     pub fn line_col_from_offset(&self, offset: usize) -> Option<(usize, usize)> {
+         if offset > self.content_length {
+             return None;
+@@ -114,6 +132,7 @@ impl LineOffsets {
+     ///
+     /// A column pointing exactly at the end of the line resolves to the byte
+     /// of the line terminator (or one past the last byte of the file).
++    #[inline]
+     pub fn offset_from_line_col(&self, line: usize, col: usize) -> Option<usize> {
+         if col == 0 {
+             return None;
+diff --git a/sourcier-core/src/map.rs b/sourcier-core/src/map.rs
+index 011991a..dd0a17f 100644
+--- a/sourcier-core/src/map.rs
++++ b/sourcier-core/src/map.rs
+@@ -5,15 +5,27 @@
+ //! [`FileId`]s with constant-time lookups in both
+ //! directions. Finalizing sorts the files by path, removes duplicate paths
+ //! (keeping the first occurrence) and assigns one-based ids in path order.
++//!
++//! # Lookup state
++//!
++//! The lookup phase is served by two compact derived structures built once at
++//! finalization:
++//!
++//! - A verified open-addressed index maps path hashes to entry indexes. The
++//!   table stores 4-byte slot values instead of owned key strings, so
++//!   finalization performs zero per-file string allocations, and every probe
++//!   is verified against the stored path bytes, so hash collisions can never
++//!   produce a wrong answer. The hash function is seeded per map, which keeps
++//!   adversarial collision patterns (`HashDoS`) from being precomputed.
++//! - Per-file [`LineOffsets`] live in a dense vector indexed by id, avoiding
++//!   a hash lookup on every `view` call.
+ 
+-use std::collections::HashMap;
++use crate::error::MapError;
++use crate::file_id::FileId;
+ 
+ #[cfg(feature = "rt-feedback")]
+ use std::sync::Arc;
+ 
+-use crate::error::MapError;
+-use crate::file_id::FileId;
+-
+ #[cfg(feature = "rt-feedback")]
+ use crate::feedback::RuntimeFeedback;
+ #[cfg(feature = "view")]
+@@ -32,14 +44,210 @@ pub struct FileRef<'a, Id: FileId> {
+     pub content: &'a [u8],
+ }
+ 
++/// Maximum byte length of a path stored inline inside its entry, without a
++/// heap allocation. Most source-tree paths fit this bound, which keeps the
++/// hot lookup path down to two dependent cache lines (index slot + entry).
++const INLINE_PATH_CAP: usize = 30;
++
++/// Path storage with short-string optimization.
++///
++/// Paths up to [`INLINE_PATH_CAP`] bytes live inline inside the 32-byte
++/// payload, so registering them performs no allocation and lookups verify
++/// their bytes without touching the heap. Longer paths fall back to a
++/// `Box<str>`.
++#[derive(Debug, Clone)]
++enum Path {
++    Inline { len: u8, buf: [u8; INLINE_PATH_CAP] },
++    Heap(Box<str>),
++}
++
++impl Path {
++    /// Stores `path`, inline when it fits the inline budget.
++    fn new(path: &str) -> Self {
++        let bytes = path.as_bytes();
++        if bytes.len() <= INLINE_PATH_CAP {
++            let mut buf = [0_u8; INLINE_PATH_CAP];
++            buf[..bytes.len()].copy_from_slice(bytes);
++            Self::Inline {
++                len: bytes.len() as u8,
++                buf,
++            }
++        } else {
++            Self::Heap(path.into())
++        }
++    }
++
++    /// Returns the raw path bytes.
++    ///
++    /// Byte equality is the verification primitive of the lookup index, so
++    /// this accessor deliberately skips any UTF-8 handling.
++    #[inline]
++    fn as_bytes(&self) -> &[u8] {
++        match self {
++            Self::Inline { len, buf } => &buf[..*len as usize],
++            Self::Heap(path) => path.as_bytes(),
++        }
++    }
++
++    /// Returns the path as a string slice.
++    fn as_str(&self) -> &str {
++        match self {
++            Self::Inline { len, buf } => {
++                let bytes = &buf[..*len as usize];
++                // The bytes came from a `&str` at registration time, so they
++                // are valid UTF-8 by construction.
++                core::str::from_utf8(bytes).expect("inline path stays valid UTF-8")
++            }
++            Self::Heap(path) => path,
++        }
++    }
++}
++
++impl PartialEq for Path {
++    fn eq(&self, other: &Self) -> bool {
++        self.as_bytes() == other.as_bytes()
++    }
++}
++
++impl Eq for Path {}
++
++impl PartialOrd for Path {
++    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
++        Some(self.cmp(other))
++    }
++}
++
++impl Ord for Path {
++    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
++        // Byte order matches the lexicographic `str` order.
++        self.as_bytes().cmp(other.as_bytes())
++    }
++}
++
++#[cfg(feature = "serde")]
++impl serde::Serialize for Path {
++    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
++    where
++        S: serde::Serializer,
++    {
++        serializer.serialize_str(self.as_str())
++    }
++}
++
++#[cfg(feature = "serde")]
++impl<'de> serde::Deserialize<'de> for Path {
++    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
++    where
++        D: serde::Deserializer<'de>,
++    {
++        let path = String::deserialize(deserializer)?;
++        Ok(Self::new(&path))
++    }
++}
++
+ /// Internal storage for one file.
+-#[derive(Debug, Clone, PartialEq, Eq)]
++///
++/// `hash` and `seq` are derived state: the hash depends on the per-map seed
++/// and the sequence number records registration order, so both are rebuilt
++/// after deserialization instead of being persisted.
++#[derive(Debug, Clone)]
+ #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+ struct Entry {
+-    path: Box<str>,
++    /// Path hash mixed with the map seed; a cheap prefilter for dedup and
++    /// lookup verification.
++    #[cfg_attr(feature = "serde", serde(skip))]
++    hash: u32,
++    /// Registration sequence number; the sort tiebreak that guarantees the
++    /// first registration of a duplicate path wins.
++    #[cfg_attr(feature = "serde", serde(skip))]
++    seq: u32,
++    path: Path,
+     content: Box<[u8]>,
+ }
+ 
++/// Verified open-addressed index from path hash to entry index.
++///
++/// Slots hold `entry index + 1`; `0` marks an empty slot. The table is sized
++/// to at least twice the entry count, so linear probing always terminates on
++/// an empty slot. Lookups verify both the stored hash and the actual path
++/// bytes, keeping the index exact under any collision pattern.
++#[derive(Debug, Clone)]
++struct PathIndex {
++    mask: u32,
++    slots: Vec<u32>,
++}
++
++impl PathIndex {
++    /// Rebuilds the index over the first `count` entries.
++    fn rebuild(&mut self, entries: &[Entry], count: usize) {
++        let capacity = (count * 2).max(8).next_power_of_two();
++        self.mask = (capacity - 1) as u32;
++        self.slots.clear();
++        self.slots.resize(capacity, 0);
++        for (index, entry) in entries[..count].iter().enumerate() {
++            let mut slot = entry.hash as usize & self.mask as usize;
++            while self.slots[slot] != 0 {
++                slot = (slot + 1) & self.mask as usize;
++            }
++            self.slots[slot] = index as u32 + 1;
++        }
++    }
++
++    /// Number of occupied slots.
++    #[cfg(test)]
++    fn len(&self) -> usize {
++        self.slots.iter().filter(|&&slot| slot != 0).count()
++    }
++}
++
++/// Returns a fresh random seed for the per-map path hashing.
++fn random_seed() -> u64 {
++    use std::hash::{BuildHasher, Hasher};
++    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
++    hasher.write(b"sourcier");
++    hasher.finish()
++}
++
++/// Hashes a path with two parallel multiply chains and one combine multiply.
++///
++/// The seed differs per map, so adversarial collision patterns cannot be
++/// precomputed. The result is only a prefilter: probes always verify the
++/// path bytes, so quality has no correctness impact.
++///
++/// The per-word multiplies run on two independent accumulation chains (even
++/// and odd words), so their latencies overlap; a single final multiply mixes
++/// the chains and the fold spreads the state over the table index range.
++#[inline]
++fn hash_path(seed: u64, bytes: &[u8]) -> u32 {
++    const K: u64 = 0x517c_c1b7_2722_0a95;
++    const K2: u64 = 0x9e37_79b9_7f4a_7c15;
++
++    #[inline]
++    fn tail_word(tail: &[u8]) -> u64 {
++        let mut buf = [0_u8; 8];
++        buf[..tail.len()].copy_from_slice(tail);
++        u64::from_le_bytes(buf)
++    }
++
++    let (blocks, rest) = bytes.as_chunks::<16>();
++    let mut even = seed;
++    let mut odd = !seed;
++    for block in blocks {
++        let (words, _) = block.as_chunks::<8>();
++        even = (even ^ u64::from_le_bytes(words[0])).wrapping_mul(K);
++        odd = (odd ^ u64::from_le_bytes(words[1])).wrapping_mul(K);
++    }
++    let (chunks, tail) = rest.as_chunks::<8>();
++    for chunk in chunks {
++        even = (even ^ u64::from_le_bytes(*chunk)).wrapping_mul(K);
++    }
++    if !tail.is_empty() {
++        odd = (odd ^ tail_word(tail)).wrapping_mul(K);
++    }
++    let combined = (even ^ odd.rotate_left(21)).wrapping_mul(K2);
++    (combined ^ (combined >> 32)) as u32
++}
++
+ /// A finalized registry of source files with compact numeric ids.
+ ///
+ /// # Build phase
+@@ -82,31 +290,57 @@ struct Entry {
+ #[cfg_attr(feature = "serde", derive(serde::Serialize))]
+ pub struct SourceFilesMap<Id: FileId> {
+     files: Vec<Entry>,
+-    path_to_id: HashMap<Box<str>, Id>,
++
++    /// Verified open-addressed path index, built at finalization and skipped
++    /// by serde: it is fully derived from the sorted `files`.
++    #[cfg_attr(feature = "serde", serde(skip))]
++    path_index: PathIndex,
++
+     finalized: bool,
+ 
+-    /// Per-file line offset indexes, maintained by the `view` feature.
++    /// Total content bytes, maintained incrementally in the build phase and
++    /// recomputed once at finalization.
++    #[cfg_attr(feature = "serde", serde(skip))]
++    total_bytes: usize,
++
++    /// Per-map seed for the path hashing (`HashDoS` resistance).
++    #[cfg_attr(feature = "serde", serde(skip))]
++    hash_seed: u64,
++
++    /// Dense per-file line offset indexes, maintained by the `view` feature.
+     #[cfg(feature = "view")]
+     #[cfg_attr(feature = "serde", serde(skip))]
+-    line_offsets: HashMap<Id, LineOffsets>,
++    line_offsets: Vec<Option<LineOffsets>>,
+ 
+     /// Shared usage statistics, maintained by the `rt-feedback` feature.
+     #[cfg(feature = "rt-feedback")]
+     #[cfg_attr(feature = "serde", serde(skip))]
+     feedback: Option<Arc<RuntimeFeedback>>,
++
++    /// Marker tying the map to its [`FileId`] type.
++    #[cfg_attr(feature = "serde", serde(skip))]
++    marker: core::marker::PhantomData<Id>,
+ }
+ 
+ /// Sort comparator: entries in lexicographic path order.
+ ///
++/// The registration sequence number breaks ties between duplicate paths so
++/// that the first registration always sorts first, which `dedup_by` then
++/// keeps: the winner no longer depends on how the unstable sort permutes
++/// equal paths.
++///
+ /// A named function (instead of a closure) keeps a single codegen copy that
+ /// is shared by every `FileId` instantiation of `finalize`.
+ fn path_order(a: &Entry, b: &Entry) -> core::cmp::Ordering {
+-    a.path.cmp(&b.path)
++    a.path.cmp(&b.path).then(a.seq.cmp(&b.seq))
+ }
+ 
+ /// Dedup predicate: duplicate paths keep their first registration.
++///
++/// The precomputed hash acts as a cheap prefilter: differing hashes reject
++/// the comparison without touching the path bytes.
+ fn same_path(a: &mut Entry, b: &mut Entry) -> bool {
+-    a.path == b.path
++    a.hash == b.hash && a.path == b.path
+ }
+ 
+ impl<Id: FileId> Default for SourceFilesMap<Id> {
+@@ -121,12 +355,18 @@ impl<Id: FileId> SourceFilesMap<Id> {
+     pub fn new() -> Self {
+         Self {
+             files: Vec::new(),
+-            path_to_id: HashMap::new(),
++            path_index: PathIndex {
++                mask: 0,
++                slots: Vec::new(),
++            },
+             finalized: false,
++            total_bytes: 0,
++            hash_seed: random_seed(),
+             #[cfg(feature = "view")]
+-            line_offsets: HashMap::new(),
++            line_offsets: Vec::new(),
+             #[cfg(feature = "rt-feedback")]
+             feedback: None,
++            marker: core::marker::PhantomData,
+         }
+     }
+ 
+@@ -136,12 +376,18 @@ impl<Id: FileId> SourceFilesMap<Id> {
+     pub fn with_capacity(expected_files: usize) -> Self {
+         Self {
+             files: Vec::with_capacity(expected_files),
+-            path_to_id: HashMap::with_capacity(expected_files),
++            path_index: PathIndex {
++                mask: 0,
++                slots: Vec::new(),
++            },
+             finalized: false,
++            total_bytes: 0,
++            hash_seed: random_seed(),
+             #[cfg(feature = "view")]
+-            line_offsets: HashMap::with_capacity(expected_files),
++            line_offsets: Vec::new(),
+             #[cfg(feature = "rt-feedback")]
+             feedback: None,
++            marker: core::marker::PhantomData,
+         }
+     }
+ 
+@@ -165,6 +411,9 @@ impl<Id: FileId> SourceFilesMap<Id> {
+     /// during [`finalize`](Self::finalize) (the first occurrence of a path
+     /// wins). Fails with [`MapError::TooManyFiles`] once the id type is
+     /// exhausted, or [`MapError::Finalized`] after finalization.
++    ///
++    /// The path hash and total byte count are maintained incrementally, so
++    /// registration stays O(1) in the file size.
+     pub fn add_file(
+         &mut self,
+         path: impl AsRef<str>,
+@@ -176,9 +425,14 @@ impl<Id: FileId> SourceFilesMap<Id> {
+         if self.files.len() >= Id::MAX_FILES {
+             return Err(MapError::TooManyFiles { max: Id::MAX_FILES });
+         }
++        let path = path.as_ref();
++        let content: Vec<u8> = content.into();
++        self.total_bytes += content.len();
+         self.files.push(Entry {
+-            path: path.as_ref().into(),
+-            content: content.into().into(),
++            hash: hash_path(self.hash_seed, path.as_bytes()),
++            seq: self.files.len() as u32,
++            path: Path::new(path),
++            content: content.into(),
+         });
+         Ok(())
+     }
+@@ -186,6 +440,9 @@ impl<Id: FileId> SourceFilesMap<Id> {
+     /// Sorts the files by path, deduplicates paths, assigns one-based ids in
+     /// path order and switches the map to its immutable lookup phase.
+     ///
++    /// Finalization performs zero per-file string allocations: the lookup
++    /// index is a verified hash table over the already-stored paths.
++    ///
+     /// Calling this method twice fails with [`MapError::AlreadyFinalized`].
+     pub fn finalize(&mut self) -> Result<(), MapError> {
+         if self.finalized {
+@@ -196,33 +453,31 @@ impl<Id: FileId> SourceFilesMap<Id> {
+         }
+ 
+         // Sort by path so ids follow a deterministic, path-lexicographic
+-        // order, then drop duplicate paths keeping the first occurrence.
++        // order, then drop duplicate paths keeping the first occurrence. The
++        // sequence-number tiebreak makes the winner independent of the sort
++        // internals.
+         self.files.sort_unstable_by(path_order);
+         self.files.dedup_by(same_path);
++        self.files.shrink_to_fit();
+ 
+-        self.path_to_id.clear();
+-        self.path_to_id.reserve(self.files.len());
+-        // The capacity check above keeps the registry within `Id::MAX_FILES`,
+-        // so every index has a one-based id; `filter_map` absorbs the range
+-        // check of `FileId::from_index` without introducing a dead branch.
+-        let ids = (0..self.files.len()).filter_map(Id::from_index);
+-        for (entry, id) in self.files.iter().zip(ids) {
+-            self.path_to_id.insert(entry.path.clone(), id);
+-        }
++        // Deduplication may have dropped bytes; recompute the total in the
++        // same pass that feeds the lookup index.
++        self.total_bytes = self.files.iter().map(|e| e.content.len()).sum();
++        self.path_index
++            .rebuild(&self.files, self.files.len().min(Id::MAX_FILES));
+ 
+         #[cfg(feature = "view")]
+         self.rebuild_line_offsets();
+ 
+         #[cfg(feature = "rt-feedback")]
+         if let Some(feedback) = &self.feedback {
+-            let total_bytes: u64 = self.files.iter().map(|e| e.content.len() as u64).sum();
+             let max_file_size = self
+                 .files
+                 .iter()
+                 .map(|e| e.content.len())
+                 .max()
+                 .unwrap_or(0);
+-            feedback.record(self.files.len(), total_bytes, max_file_size);
++            feedback.record(self.files.len(), self.total_bytes as u64, max_file_size);
+         }
+ 
+         self.finalized = true;
+@@ -248,9 +503,13 @@ impl<Id: FileId> SourceFilesMap<Id> {
+     }
+ 
+     /// Returns the total number of content bytes currently held.
++    ///
++    /// The count is maintained incrementally during the build phase and
++    /// cached after finalization, so this is O(1) at every point of the
++    /// lifecycle.
+     #[inline]
+     pub fn total_bytes(&self) -> usize {
+-        self.files.iter().map(|e| e.content.len()).sum()
++        self.total_bytes
+     }
+ 
+     /// Iterates over the registered paths.
+@@ -258,7 +517,7 @@ impl<Id: FileId> SourceFilesMap<Id> {
+     /// Before finalization the paths appear in insertion order; afterwards
+     /// they are sorted.
+     pub fn paths(&self) -> impl Iterator<Item = &str> {
+-        self.files.iter().map(|e| e.path.as_ref())
++        self.files.iter().map(|e| e.path.as_str())
+     }
+ 
+     /// Iterates over all files together with their ids.
+@@ -276,7 +535,7 @@ impl<Id: FileId> SourceFilesMap<Id> {
+                 let id = Id::from_index(index)?;
+                 Some(FileRef {
+                     id,
+-                    path: entry.path.as_ref(),
++                    path: entry.path.as_str(),
+                     content: entry.content.as_ref(),
+                 })
+             })
+@@ -284,12 +543,14 @@ impl<Id: FileId> SourceFilesMap<Id> {
+ 
+     /// Returns the id assigned to `path`, or `None` for unknown paths and
+     /// unfinalized maps.
++    ///
++    /// The lookup runs through a verified open-addressed index: one seeded
++    /// hash over the queried path, then linear probing with hash-and-bytes
++    /// verification.
+     #[inline]
+     pub fn get_id(&self, path: &str) -> Option<Id> {
+-        if !self.finalized {
+-            return None;
+-        }
+-        self.path_to_id.get(path).copied()
++        let index = self.lookup_index(path)?;
++        Id::from_index(index)
+     }
+ 
+     /// Returns the path registered under `id`, or `None` for invalid ids and
+@@ -299,7 +560,7 @@ impl<Id: FileId> SourceFilesMap<Id> {
+             return None;
+         }
+         let index = self.index_of(id)?;
+-        self.files.get(index).map(|e| e.path.as_ref())
++        self.files.get(index).map(|e| e.path.as_str())
+     }
+ 
+     /// Returns the raw content registered under `id`, or `None` for invalid
+@@ -320,7 +581,7 @@ impl<Id: FileId> SourceFilesMap<Id> {
+         let index = self.index_of(id)?;
+         self.files.get(index).map(|entry| FileRef {
+             id,
+-            path: entry.path.as_ref(),
++            path: entry.path.as_str(),
+             content: entry.content.as_ref(),
+         })
+     }
+@@ -340,7 +601,7 @@ impl<Id: FileId> SourceFilesMap<Id> {
+     #[cfg_attr(docsrs, doc(cfg(feature = "view")))]
+     pub fn view(&self, id: Id, pos: &impl SourceFilePosition) -> Option<&[u8]> {
+         let content = self.get_content(id)?;
+-        let offsets = self.line_offsets.get(&id)?;
++        let offsets = self.line_offsets_for(id)?;
+ 
+         let start_line = pos.start_line() as usize;
+         let start_col = pos.start_column() as usize;
+@@ -375,6 +636,20 @@ impl<Id: FileId> SourceFilesMap<Id> {
+         Some(&content[start_byte..end_byte])
+     }
+ 
++    /// Returns the per-file line offset index for `id`, or `None` for
++    /// unknown ids and unfinalized maps.
++    ///
++    /// Requires the `view` feature. This exposes the index behind
++    /// [`view`](Self::view) so callers can run their own offset/line/column
++    /// conversions against the exact index the views use, without
++    /// re-scanning file contents.
++    #[cfg(feature = "view")]
++    #[cfg_attr(docsrs, doc(cfg(feature = "view")))]
++    #[inline]
++    pub fn line_offsets(&self, id: Id) -> Option<&LineOffsets> {
++        self.line_offsets_for(id)
++    }
++
+     /// Like [`view`](Self::view) but only returns the slice when it is valid
+     /// UTF-8.
+     ///
+@@ -393,15 +668,62 @@ impl<Id: FileId> SourceFilesMap<Id> {
+     /// unindexed file.
+     #[cfg(feature = "view")]
+     fn rebuild_line_offsets(&mut self) {
++        // Ids only exist for the first `Id::MAX_FILES` entries; crafted
++        // deserialized maps can carry more entries than that.
++        let count = self.files.len().min(Id::MAX_FILES);
+         self.line_offsets.clear();
+-        // Ids always exist here for the same reason as in `finalize`.
+-        let ids = (0..self.files.len()).filter_map(Id::from_index);
+-        let indexes = self.files.iter().zip(ids).filter_map(|(entry, id)| {
+-            LineOffsets::compute(&entry.content)
+-                .ok()
+-                .map(|offsets| (id, offsets))
+-        });
+-        self.line_offsets.extend(indexes);
++        self.line_offsets.reserve(count);
++        #[cfg(feature = "parallel")]
++        {
++            use rayon::prelude::*;
++            let computed: Vec<Option<LineOffsets>> = self.files[..count]
++                .par_iter()
++                .map(|entry| LineOffsets::compute(&entry.content).ok())
++                .collect();
++            self.line_offsets = computed;
++        }
++        #[cfg(not(feature = "parallel"))]
++        self.line_offsets.extend(
++            self.files[..count]
++                .iter()
++                .map(|entry| LineOffsets::compute(&entry.content).ok()),
++        );
++    }
++
++    /// Returns the line offset index of `id`, or `None` for unknown ids and
++    /// unfinalized maps.
++    #[cfg(feature = "view")]
++    #[inline]
++    fn line_offsets_for(&self, id: Id) -> Option<&LineOffsets> {
++        if !self.finalized {
++            return None;
++        }
++        let index = self.index_of(id)?;
++        self.line_offsets.get(index).and_then(|slot| slot.as_ref())
++    }
++
++    /// Resolves `path` to its zero-based entry index through the verified
++    /// open-addressed index.
++    #[inline]
++    fn lookup_index(&self, path: &str) -> Option<usize> {
++        if !self.finalized {
++            return None;
++        }
++        let hash = hash_path(self.hash_seed, path.as_bytes());
++        let mask = self.path_index.mask as usize;
++        let mut slot = hash as usize & mask;
++        loop {
++            let probed = self.path_index.slots[slot];
++            if probed == 0 {
++                return None;
++            }
++            let index = probed as usize - 1;
++            let entry = self.files.get(index)?;
++            if entry.hash == hash && entry.path.as_bytes() == path.as_bytes() {
++                return Some(index);
++            }
++            slot = (slot + 1) & mask;
++        }
+     }
+ 
+     /// Maps a one-based id to its zero-based index into `files`.
+@@ -413,25 +735,31 @@ impl<Id: FileId> SourceFilesMap<Id> {
+             .ok()
+             .filter(|&i| i < self.files.len())
+     }
++
++    /// Recomputes every piece of derived state (hashes, sequence numbers,
++    /// byte totals, lookup index and line offsets) from the raw entries.
++    #[cfg(feature = "serde")]
++    fn rebuild_derived_state(&mut self) {
++        let seed = self.hash_seed;
++        for (index, entry) in self.files.iter_mut().enumerate() {
++            entry.hash = hash_path(seed, entry.path.as_bytes());
++            entry.seq = index as u32;
++        }
++        self.total_bytes = self.files.iter().map(|e| e.content.len()).sum();
++        if self.finalized {
++            self.path_index
++                .rebuild(&self.files, self.files.len().min(Id::MAX_FILES));
++            #[cfg(feature = "view")]
++            self.rebuild_line_offsets();
++        }
++    }
+ }
+ 
+ #[cfg(feature = "serde")]
+ mod serde_impl {
+-    use std::collections::HashMap;
+-
+     use serde::de::Deserialize;
+ 
+-    use super::{Entry, FileId, SourceFilesMap};
+-
+-    impl<Id: FileId> SourceFilesMap<Id> {
+-        /// Recomputes feature-specific derived state after deserialization.
+-        pub(crate) fn rebuild_derived_state(&mut self) {
+-            #[cfg(feature = "view")]
+-            if self.finalized {
+-                self.rebuild_line_offsets();
+-            }
+-        }
+-    }
++    use super::{Entry, FileId, PathIndex, SourceFilesMap};
+ 
+     impl<'de, Id> Deserialize<'de> for SourceFilesMap<Id>
+     where
+@@ -441,23 +769,32 @@ mod serde_impl {
+         where
+             D: serde::Deserializer<'de>,
+         {
++            /// Wire format. Only the raw entries and the phase flag are
++            /// persisted; lookup state (path index, line offsets, hashes)
++            /// is derived and rebuilt, so payloads stay compact and can
++            /// never carry inconsistent lookup tables. The v1 field
++            /// `path_to_id` is accepted on read and ignored.
+             #[derive(serde::Deserialize)]
+-            #[serde(bound = "Id: serde::Deserialize<'de>")]
+-            struct Repr<Id> {
++            struct Repr {
+                 files: Vec<Entry>,
+-                path_to_id: HashMap<Box<str>, Id>,
+                 finalized: bool,
+             }
+ 
+-            let repr = Repr::<Id>::deserialize(deserializer)?;
++            let repr = Repr::deserialize(deserializer)?;
+             let mut map = SourceFilesMap::<Id> {
+                 files: repr.files,
+-                path_to_id: repr.path_to_id,
++                path_index: PathIndex {
++                    mask: 0,
++                    slots: Vec::new(),
++                },
+                 finalized: repr.finalized,
++                total_bytes: 0,
++                hash_seed: super::random_seed(),
+                 #[cfg(feature = "view")]
+-                line_offsets: HashMap::new(),
++                line_offsets: Vec::new(),
+                 #[cfg(feature = "rt-feedback")]
+                 feedback: None,
++                marker: core::marker::PhantomData,
+             };
+             map.rebuild_derived_state();
+             Ok(map)
+@@ -539,6 +876,166 @@ mod tests {
+         assert_eq!(files.get_content(id), Some(&b"first"[..]));
+     }
+ 
++    #[test]
++    fn duplicate_paths_keep_the_first_content_at_scale() {
++        // Hundreds of files with scattered duplicates exercise the seq
++        // tiebreak of the sort: the first registration must win no matter
++        // how the unstable sort permutes equal paths.
++        let mut files = SourceFilesMap::<u16>::new();
++        for index in 0..400 {
++            let slot = index % 25;
++            files
++                .add_file(format!("dup_{slot:02}.txt"), format!("content {index}"))
++                .expect("u16 capacity");
++        }
++        files.finalize().expect("fits");
++        assert_eq!(files.len(), 25);
++        for slot in 0..25 {
++            let expected = format!("content {slot}");
++            let id = files
++                .get_id(&format!("dup_{slot:02}.txt"))
++                .expect("present");
++            assert_eq!(
++                files.get_content(id),
++                Some(expected.as_bytes()),
++                "first registration wins"
++            );
++        }
++    }
++
++    #[test]
++    fn path_index_holds_one_slot_per_unique_path() {
++        let files = sample();
++        assert_eq!(files.path_index.len(), 2);
++
++        // Duplicated paths collapse to a single slot.
++        let mut dups = SourceFilesMap::<u8>::new();
++        dups.add_file("x.txt", b"1").expect("fits");
++        dups.add_file("x.txt", b"2").expect("fits");
++        dups.finalize().expect("fits");
++        assert_eq!(dups.path_index.len(), 1);
++
++        // An empty map builds the minimum table without any slot.
++        let mut empty = SourceFilesMap::<u8>::new();
++        empty.finalize().expect("fits");
++        assert_eq!(empty.path_index.len(), 0);
++        assert_eq!(empty.get_id("anything"), None);
++    }
++
++    #[test]
++    fn total_bytes_survives_dedup_and_matches_contents() {
++        let mut files = SourceFilesMap::<u8>::new();
++        files.add_file("dup.txt", b"first").expect("fits");
++        files.add_file("dup.txt", b"second-longer").expect("fits");
++        files.add_file("solo.txt", b"abc").expect("fits");
++        assert_eq!(files.total_bytes(), 21);
++        files.finalize().expect("fits");
++        // Only the surviving first registration counts.
++        assert_eq!(files.total_bytes(), 8);
++        let counted: usize = files.iter().map(|f| f.content.len()).sum();
++        assert_eq!(files.total_bytes(), counted);
++    }
++
++    #[test]
++    fn hash_path_changes_with_the_seed() {
++        let a = hash_path(1, b"src/main.rs");
++        let b = hash_path(2, b"src/main.rs");
++        assert_ne!(a, b, "seeds must decorrelate maps");
++        // Same seed is deterministic and handles short and multi-chunk paths.
++        assert_eq!(hash_path(7, b""), hash_path(7, b""));
++        assert_eq!(hash_path(7, b"a"), hash_path(7, b"a"));
++        let long = "src/some/quite/long/module/path/that/spans/many/chunks.rs";
++        assert_eq!(hash_path(7, long.as_bytes()), hash_path(7, long.as_bytes()));
++    }
++
++    #[test]
++    fn long_paths_take_the_heap_variant_and_stay_exact() {
++        let short = "src/lib.rs";
++        let long = "a/very/deeply/nested/source/tree/that/exceeds/the/inline/budget/module.rs";
++        assert!(short.len() <= 30);
++        assert!(long.len() > 30);
++
++        let mut files = SourceFilesMap::<u8>::new();
++        files.add_file(long, b"heap").expect("fits");
++        files.add_file(short, b"inline").expect("fits");
++        files.finalize().expect("fits");
++
++        // Both path kinds resolve exactly, in sorted path order.
++        let id_long = files.get_id(long).expect("heap path indexed");
++        let id_short = files.get_id(short).expect("inline path indexed");
++        assert!(u64::from(id_long) < u64::from(id_short), "sorted by path");
++        assert_eq!(files.get_path(id_long), Some(long));
++        assert_eq!(files.get_content(id_long), Some(&b"heap"[..]));
++        assert_eq!(files.get_path(id_short), Some(short));
++
++        // Unknown paths still miss.
++        assert_eq!(files.get_id("src/lib.rs/"), None);
++
++        // The ordering impls compare by bytes, exactly like `str`.
++        let a = Path::new(short);
++        let b = Path::new(long);
++        assert_eq!(a.partial_cmp(&b), Some(core::cmp::Ordering::Greater));
++        assert_eq!(a.cmp(&b), core::cmp::Ordering::Greater);
++        assert!(a > b);
++        assert!(b < a);
++        assert_eq!(a, Path::new(short));
++    }
++
++    #[test]
++    #[cfg(feature = "view")]
++    fn line_offsets_accessor_fails_before_finalization() {
++        let mut files = SourceFilesMap::<u8>::new();
++        files.add_file("a.txt", b"alpha\nbeta").expect("fits");
++        assert_eq!(files.line_offsets(1), None);
++        files.finalize().expect("fits");
++        assert!(files.line_offsets(1).is_some());
++    }
++
++    #[test]
++    fn probe_distribution_diagnostic() {
++        // Measures the average probe length of successful lookups over 2000
++        // realistic paths (kept as a diagnostic; assertions are loose).
++        let paths: Vec<String> = (0..2_000)
++            .map(|file| format!("src/module_{file:04}.rs"))
++            .collect();
++        let mut map = SourceFilesMap::<u16>::new();
++        for path in &paths {
++            map.add_file(path.as_str(), "x").expect("fits");
++        }
++        map.finalize().expect("fits");
++
++        let seed = map.hash_seed;
++        let mask = map.path_index.mask as usize;
++        let slots = &map.path_index.slots;
++        let files = &map.files;
++        let mut total_probes = 0_usize;
++        for path in &paths {
++            let hash = hash_path(seed, path.as_bytes());
++            let mut slot = hash as usize & mask;
++            let mut probes = 1;
++            loop {
++                let occupied = slots[slot];
++                let found = occupied != 0 && {
++                    let index = occupied as usize - 1;
++                    files[index].hash == hash && files[index].path.as_bytes() == path.as_bytes()
++                };
++                if found {
++                    break;
++                }
++                slot = (slot + 1) & mask;
++                probes += 1;
++                assert!(probes <= slots.len(), "probe run must terminate");
++            }
++            total_probes += probes;
++        }
++        let average = total_probes as f64 / paths.len() as f64;
++        println!(
++            "average probes per successful lookup: {average:.2} (load factor {:.2})",
++            files.len() as f64 / slots.len() as f64
++        );
++        assert!(average < 2.5, "hash distribution degraded: {average:.2}");
++    }
++
+     #[test]
+     fn iteration_covers_all_files_with_ids() {
+         let files = sample();
+diff --git a/sourcier-core/src/tests/mod.rs b/sourcier-core/src/tests/mod.rs
+index 1f8b608..7e52c97 100644
+--- a/sourcier-core/src/tests/mod.rs
++++ b/sourcier-core/src/tests/mod.rs
+@@ -8,6 +8,8 @@
+ 
+ pub mod feedback;
+ pub mod lifecycle;
++#[cfg(all(feature = "view", feature = "parallel"))]
++pub mod parallel;
+ pub mod positions;
+ pub mod property;
+ #[cfg(feature = "serde")]
+diff --git a/sourcier-core/src/tests/parallel.rs b/sourcier-core/src/tests/parallel.rs
+new file mode 100644
+index 0000000..1bb0c12
+--- /dev/null
++++ b/sourcier-core/src/tests/parallel.rs
+@@ -0,0 +1,56 @@
++//! Integration tests for the opt-in `parallel` feature.
++//!
++//! The parallel line-offset build must produce byte-identical indexes to the
++//! documented serial semantics, with a deterministic layout.
++
++#![cfg(all(feature = "view", feature = "parallel"))]
++
++use crate::{AbsolutePosition, LineOffsets, SourceFilesMap};
++
++#[test]
++fn parallel_finalize_matches_the_serial_semantics() {
++    let contents: Vec<Vec<u8>> = (0..64)
++        .map(|file| {
++            (0..200)
++                .map(|line| format!("fn item_{file}_{line}() {{ /* body */ }}\n").into_bytes())
++                .fold(Vec::new(), |mut acc, mut line| {
++                    acc.append(&mut line);
++                    acc
++                })
++        })
++        .collect();
++
++    let mut files = SourceFilesMap::<u16>::new();
++    for (index, content) in contents.iter().enumerate() {
++        files
++            .add_file(format!("src/m{index:03}.rs"), content.as_slice())
++            .expect("fits");
++    }
++    files.finalize().expect("fits");
++
++    for (index, content) in contents.iter().enumerate() {
++        let id = files
++            .get_id(&format!("src/m{index:03}.rs"))
++            .expect("indexed");
++        let expected = LineOffsets::compute(content).expect("fits");
++        assert_eq!(files.line_offsets(id), Some(&expected));
++        assert_eq!(files.get_content(id), Some(content.as_slice()));
++    }
++
++    // Views keep working through the parallel build: extract lines 10-12.
++    let id = files.get_id("src/m000.rs").expect("indexed");
++    let content = &contents[0];
++    let offsets = files.line_offsets(id).expect("indexed");
++    let line12_len = {
++        let range = offsets.line_range(12).expect("line exists");
++        range.end - range.start
++    };
++    let start = offsets.offset_from_line_col(10, 1).expect("in range");
++    let start12 = offsets.offset_from_line_col(12, 1).expect("in range");
++    let end = start12 + line12_len; // exclusive: covers line 12 content
++    let pos = AbsolutePosition::new(id, 10, 1, 12, line12_len as u8);
++    let view = files.view(id, &pos).expect("valid span");
++    assert_eq!(view, &content[start..end]);
++    assert!(view.starts_with(b"fn item_0_9()"));
++    assert!(view.ends_with(b"}"));
++}
+diff --git a/sourcier-core/src/tests/property.rs b/sourcier-core/src/tests/property.rs
+index 46c092d..0f3f495 100644
+--- a/sourcier-core/src/tests/property.rs
++++ b/sourcier-core/src/tests/property.rs
+@@ -3,6 +3,11 @@
+ use crate::{AbsolutePosition, RelativePosition, SourceFilePosition, SourceFilesMap};
+ use proptest::prelude::*;
+ 
++/// Builds the duplicate-path used by the first-wins property test.
++fn dup_path(slot: usize) -> String {
++    format!("dup_file_{slot:02}.rs")
++}
++
+ proptest! {
+     #![proptest_config(proptest::prelude::ProptestConfig::with_cases(512))]
+ 
+@@ -88,6 +93,40 @@ proptest! {
+             prop_assert_eq!(files.get_path(id), Some(name.as_str()));
+         }
+     }
++
++    #[test]
++    fn duplicate_paths_keep_the_first_registration_at_scale(
++        // Hundreds of files with scattered duplicates stress the unstable
++        // sort used during finalization: the first-registered content of a
++        // duplicate path must survive regardless of sort internals.
++        pattern in proptest::collection::vec(0_usize..24, 300..460),
++    ) {
++        let mut files = SourceFilesMap::<u16>::new();
++        let mut first_content: Vec<Option<usize>> = vec![None; 24];
++        for (index, slot) in pattern.iter().enumerate() {
++            if first_content[*slot].is_none() {
++                first_content[*slot] = Some(index);
++            }
++            files
++                .add_file(dup_path(*slot), format!("content {index}"))
++                .expect("u16 capacity");
++        }
++        files.finalize().expect("u16 capacity");
++
++        prop_assert_eq!(files.len(), first_content.iter().flatten().count());
++        for (slot, first) in first_content.iter().enumerate() {
++            let first = first.expect("slot registered");
++            let path = dup_path(slot);
++            let expected = format!("content {first}");
++            let id = files.get_id(&path).expect("path survives dedup");
++            prop_assert_eq!(
++                files.get_content(id),
++                Some(expected.as_bytes()),
++                "first registration wins for slot {}",
++                slot
++            );
++        }
++    }
+ }
+ 
+ #[cfg(feature = "view")]
+diff --git a/sourcier-core/src/tests/serde.rs b/sourcier-core/src/tests/serde.rs
+index 8eb6d10..69c8896 100644
+--- a/sourcier-core/src/tests/serde.rs
++++ b/sourcier-core/src/tests/serde.rs
+@@ -17,7 +17,7 @@ fn crafted_oversized_map_json(finalized: bool) -> String {
+         }
+         let _ = write!(json, "{{\"path\":\"f{index:03}\",\"content\":[120]}}");
+     }
+-    let _ = write!(json, "],\"path_to_id\":{{}},\"finalized\":{finalized}}}");
++    let _ = write!(json, "],\"finalized\":{finalized}}}");
+     json
+ }
+ 
+@@ -61,6 +61,62 @@ fn finalized_map_round_trips_with_lookup_state() {
+     assert_eq!(rebuilt.iter().count(), 2);
+ }
+ 
++#[test]
++fn serialized_format_omits_redundant_lookup_state() {
++    // The path-to-id table is derived from the sorted files, so v2 payloads
++    // no longer carry it: payloads shrink and deserialized maps can never
++    // hold inconsistent lookup state.
++    let mut files = SourceFilesMap::<u8>::new();
++    files.add_file("a.txt", b"alpha").expect("fits");
++    files.finalize().expect("fits");
++
++    let json = serde_json::to_string(&files).expect("serializable");
++    assert!(
++        !json.contains("path_to_id"),
++        "derived lookup state must not be serialized: {json}"
++    );
++    assert!(json.contains("finalized"), "{json}");
++
++    let rebuilt: SourceFilesMap<u8> = serde_json::from_str(&json).expect("deserializable");
++    assert_eq!(rebuilt.get_id("a.txt"), Some(1));
++}
++
++#[test]
++fn legacy_payloads_with_lookup_state_still_load() {
++    // v1 payloads carried a `path_to_id` table; deserialization stays a
++    // tolerant reader and ignores the redundant field.
++    let legacy = r#"{
++        "files": [{"path": "legacy.txt", "content": [108, 105, 110, 101]}],
++        "path_to_id": {"legacy.txt": 1},
++        "finalized": true
++    }"#;
++    let rebuilt: SourceFilesMap<u8> = serde_json::from_str(legacy).expect("tolerant reader");
++    assert!(rebuilt.is_finalized());
++    let id = rebuilt.get_id("legacy.txt").expect("path indexed");
++    assert_eq!(id, 1);
++    assert_eq!(rebuilt.get_path(1), Some("legacy.txt"));
++    assert_eq!(rebuilt.get_content(1), Some(&b"line"[..]));
++}
++
++#[test]
++fn deserialized_unfinalized_maps_keep_first_registration_wins() {
++    // A deserialized build-phase map can be finalized later; duplicate
++    // resolution must keep the first registration of the serialized order.
++    let mut files = SourceFilesMap::<u8>::new();
++    files.add_file("dup.txt", b"first").expect("fits");
++    files.add_file("z.txt", b"zeta").expect("fits");
++    files.add_file("dup.txt", b"second").expect("fits");
++    files.add_file("a.txt", b"alpha").expect("fits");
++
++    let json = serde_json::to_string(&files).expect("serializable");
++    let mut rebuilt: SourceFilesMap<u8> = serde_json::from_str(&json).expect("deserializable");
++    rebuilt.finalize().expect("fits");
++
++    let id = rebuilt.get_id("dup.txt").expect("present");
++    assert_eq!(rebuilt.get_content(id), Some(&b"first"[..]));
++    assert_eq!(rebuilt.len(), 3);
++}
++
+ #[test]
+ fn deserialized_map_supports_views_again() {
+     let mut files = SourceFilesMap::<u8>::new();
+diff --git a/sourcier-core/src/tests/snapshots/sourcier_core__tests__snapshots__build_phase_map_serializes_without_lookup_state.snap b/sourcier-core/src/tests/snapshots/sourcier_core__tests__snapshots__build_phase_map_serializes_without_lookup_state.snap
+index a9880b2..2d8f50f 100644
+--- a/sourcier-core/src/tests/snapshots/sourcier_core__tests__snapshots__build_phase_map_serializes_without_lookup_state.snap
++++ b/sourcier-core/src/tests/snapshots/sourcier_core__tests__snapshots__build_phase_map_serializes_without_lookup_state.snap
+@@ -22,5 +22,4 @@ files:
+       - 121
+       - 101
+       - 116
+-path_to_id: {}
+ finalized: false
+diff --git a/sourcier-core/src/tests/snapshots/sourcier_core__tests__snapshots__finalized_map_serializes_as_reviewable_yaml.snap b/sourcier-core/src/tests/snapshots/sourcier_core__tests__snapshots__finalized_map_serializes_as_reviewable_yaml.snap
+index d547c56..190099c 100644
+--- a/sourcier-core/src/tests/snapshots/sourcier_core__tests__snapshots__finalized_map_serializes_as_reviewable_yaml.snap
++++ b/sourcier-core/src/tests/snapshots/sourcier_core__tests__snapshots__finalized_map_serializes_as_reviewable_yaml.snap
+@@ -45,8 +45,4 @@ files:
+       - 32
+       - 123
+       - 125
+-path_to_id:
+-  README.md: 1
+-  src/lib.rs: 2
+-  src/main.rs: 3
+ finalized: true
+diff --git a/sourcier-core/src/tests/view.rs b/sourcier-core/src/tests/view.rs
+index 87d2524..00cb31c 100644
+--- a/sourcier-core/src/tests/view.rs
++++ b/sourcier-core/src/tests/view.rs
+@@ -244,6 +244,47 @@ fn view_handles_empty_files_and_full_line_endpoints() {
+     assert_eq!(files.view(id, &pos), Some(&b"alpha\n"[..]));
+ }
+ 
++#[test]
++fn line_offsets_accessor_matches_the_stored_index() {
++    let files = sample_map();
++
++    let id = files.get_id("text.txt").expect("present");
++    let offsets = files.line_offsets(id).expect("indexed file");
++    let recomputed = LineOffsets::compute(b"alpha\nbeta\ngamma").expect("fits");
++    assert_eq!(offsets, &recomputed);
++    assert_eq!(offsets.line_count(), 3);
++    assert_eq!(offsets.line_range(2), Some(6..10));
++
++    // The empty file is indexed as a single empty line.
++    let empty_id = files.get_id("empty.txt").expect("present");
++    let empty_offsets = files.line_offsets(empty_id).expect("indexed file");
++    assert_eq!(empty_offsets.line_count(), 1);
++}
++
++#[test]
++fn line_offsets_accessor_resolves_to_none_like_view() {
++    let files = sample_map();
++
++    // Unknown ids hold no line index.
++    assert_eq!(files.line_offsets(99), None);
++    // Id 0 is never assigned.
++    assert_eq!(files.line_offsets(0), None);
++}
++
++#[test]
++fn line_starts_exposes_the_raw_offsets() {
++    let lines = LineOffsets::compute(b"one\ntwo\nthree").expect("fits");
++    assert_eq!(lines.line_starts(), &[0, 4, 8]);
++
++    // The trailing newline still opens a final, empty line.
++    let trailing = LineOffsets::compute(b"one\ntwo\n").expect("fits");
++    assert_eq!(trailing.line_starts(), &[0, 4, 8]);
++
++    // An empty file has exactly one line starting at offset 0.
++    let empty = LineOffsets::compute(b"").expect("fits");
++    assert_eq!(empty.line_starts(), &[0]);
++}
++
+ #[test]
+ fn line_offsets_answer_line_col_queries() {
+     let lines = LineOffsets::compute(b"one\ntwo\nthree").expect("fits");
+diff --git a/src/lib.rs b/src/lib.rs
+index ee57d72..281b458 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -41,6 +41,7 @@
+ //! - `serde` - serialization support for maps and positions.
+ //! - `view` - line offset indexes plus `view`/`view_str` lookups.
+ //! - `rt-feedback` - lock-free shared usage statistics.
++//! - `parallel` - multi-threaded line-offset index construction with `rayon`.
+ 
+ #![forbid(unsafe_code)]
+ #![deny(missing_docs)]
