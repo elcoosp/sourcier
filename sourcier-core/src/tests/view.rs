@@ -245,6 +245,47 @@ fn view_handles_empty_files_and_full_line_endpoints() {
 }
 
 #[test]
+fn line_offsets_accessor_matches_the_stored_index() {
+    let files = sample_map();
+
+    let id = files.get_id("text.txt").expect("present");
+    let offsets = files.line_offsets(id).expect("indexed file");
+    let recomputed = LineOffsets::compute(b"alpha\nbeta\ngamma").expect("fits");
+    assert_eq!(offsets, &recomputed);
+    assert_eq!(offsets.line_count(), 3);
+    assert_eq!(offsets.line_range(2), Some(6..10));
+
+    // The empty file is indexed as a single empty line.
+    let empty_id = files.get_id("empty.txt").expect("present");
+    let empty_offsets = files.line_offsets(empty_id).expect("indexed file");
+    assert_eq!(empty_offsets.line_count(), 1);
+}
+
+#[test]
+fn line_offsets_accessor_resolves_to_none_like_view() {
+    let files = sample_map();
+
+    // Unknown ids hold no line index.
+    assert_eq!(files.line_offsets(99), None);
+    // Id 0 is never assigned.
+    assert_eq!(files.line_offsets(0), None);
+}
+
+#[test]
+fn line_starts_exposes_the_raw_offsets() {
+    let lines = LineOffsets::compute(b"one\ntwo\nthree").expect("fits");
+    assert_eq!(lines.line_starts(), &[0, 4, 8]);
+
+    // The trailing newline still opens a final, empty line.
+    let trailing = LineOffsets::compute(b"one\ntwo\n").expect("fits");
+    assert_eq!(trailing.line_starts(), &[0, 4, 8]);
+
+    // An empty file has exactly one line starting at offset 0.
+    let empty = LineOffsets::compute(b"").expect("fits");
+    assert_eq!(empty.line_starts(), &[0]);
+}
+
+#[test]
 fn line_offsets_answer_line_col_queries() {
     let lines = LineOffsets::compute(b"one\ntwo\nthree").expect("fits");
     assert_eq!(lines.line_count(), 3);
