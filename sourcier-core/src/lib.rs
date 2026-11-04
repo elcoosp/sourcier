@@ -11,12 +11,15 @@
 //!
 //! # Workflow
 //!
-//! 1. Register files in a [`SourceFilesMap`] and call
-//!    [`finalize`](SourceFilesMap::finalize) to assign stable ids.
+//! 1. Register files in a [`SourceFilesMap`] — or in the type-state
+//!    [`SourceFilesBuilder`], which only exposes the registration API — and
+//!    call [`finalize`](SourceFilesMap::finalize) to assign stable ids.
 //! 2. Create [`AbsolutePosition`]s (or file-agnostic
 //!    [`RelativePosition`]s) that pack a span into one `u64`.
 //! 3. Query the map: paths, contents and, with the `view` feature, the exact
-//!    bytes covered by a position.
+//!    bytes covered by a position. Byte offsets and positions convert in
+//!    O(log n) with [`position_from_offset`](SourceFilesMap::position_from_offset)
+//!    and [`offset_from_position`](SourceFilesMap::offset_from_position).
 //!
 //! ```
 //! use sourcier_core::{AbsolutePosition, SourceFilePosition, SourceFilesMap};
@@ -67,6 +70,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 // Public modules.
+pub mod builder;
 pub mod error;
 #[cfg(feature = "rt-feedback")]
 #[cfg_attr(docsrs, doc(cfg(feature = "rt-feedback")))]
@@ -79,13 +83,14 @@ pub mod map;
 pub mod position;
 
 // Re-export commonly used types for convenience.
+pub use builder::SourceFilesBuilder;
 pub use error::{MapError, PositionError};
 #[cfg(feature = "rt-feedback")]
 pub use feedback::{FeedbackSnapshot, RuntimeFeedback};
 pub use file_id::FileId;
 #[cfg(feature = "view")]
 pub use line_map::LineOffsets;
-pub use map::{FileRef, SourceFilesMap};
+pub use map::{FileRef, Iter, PositionDisplay, SourceFilesMap};
 pub use position::{
     AbsolutePosition, CompactAbsolutePosition, RelativePosition, SourceFilePosition,
     StandardAbsolutePosition,
