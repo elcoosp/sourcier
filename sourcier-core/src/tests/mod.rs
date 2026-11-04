@@ -6,8 +6,11 @@
 //! accounting free of phantom misses from duplicate copies across separate
 //! test crates.
 
+pub mod builder;
 pub mod feedback;
 pub mod lifecycle;
+#[cfg(feature = "view")]
+pub mod navigation;
 #[cfg(all(feature = "view", feature = "parallel"))]
 pub mod parallel;
 pub mod positions;
