@@ -40,6 +40,20 @@ pub enum MapError {
         /// Size of the offending file in bytes.
         size: u64,
     },
+
+    /// A path was registered through
+    /// [`add_path`](crate::map::SourceFilesMap::add_path) that is not valid
+    /// UTF-8.
+    ///
+    /// Paths are stored as `str` values, so a path carrying arbitrary OS
+    /// bytes cannot be registered losslessly. The lossy rendering of the
+    /// path (invalid bytes replaced by `U+FFFD`) is carried in the error for
+    /// diagnostics.
+    #[error("path is not valid UTF-8: {path}")]
+    PathNotUtf8 {
+        /// Lossy rendering of the offending path.
+        path: String,
+    },
 }
 
 /// Errors produced when constructing positions with the checked
@@ -92,6 +106,13 @@ mod tests {
         assert_eq!(
             MapError::FileTooLarge { size: 1 << 32 }.to_string(),
             "file content of 4294967296 bytes exceeds the 4 GiB line offset limit"
+        );
+        assert_eq!(
+            MapError::PathNotUtf8 {
+                path: String::from("caf\u{FFFD}.txt")
+            }
+            .to_string(),
+            "path is not valid UTF-8: caf\u{FFFD}.txt"
         );
     }
 
