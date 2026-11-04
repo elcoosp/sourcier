@@ -23,6 +23,8 @@
 use crate::error::MapError;
 use crate::file_id::FileId;
 
+use core::fmt;
+
 #[cfg(feature = "rt-feedback")]
 use std::sync::Arc;
 
@@ -31,7 +33,7 @@ use crate::feedback::RuntimeFeedback;
 #[cfg(feature = "view")]
 use crate::line_map::LineOffsets;
 #[cfg(feature = "view")]
-use crate::position::SourceFilePosition;
+use crate::position::{AbsolutePosition, SourceFilePosition};
 
 /// A borrowed view of one registered file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +44,83 @@ pub struct FileRef<'a, Id: FileId> {
     pub path: &'a str,
     /// Raw content bytes of the file.
     pub content: &'a [u8],
+}
+
+/// Iterator over the files of a finalized map, yielded together with their
+/// ids.
+///
+/// Created by [`iter`](SourceFilesMap::iter) and by
+/// `&SourceFilesMap`'s [`IntoIterator`] implementation. Yields nothing
+/// before finalization, because ids only exist afterwards.
+#[derive(Debug, Clone)]
+pub struct Iter<'a, Id: FileId> {
+    files: core::iter::Enumerate<core::slice::Iter<'a, Entry>>,
+    finalized: bool,
+    marker: core::marker::PhantomData<Id>,
+}
+
+impl<'a, Id: FileId> Iterator for Iter<'a, Id> {
+    type Item = FileRef<'a, Id>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.finalized {
+            return None;
+        }
+        loop {
+            let (index, entry) = self.files.next()?;
+            if let Some(id) = Id::from_index(index) {
+                return Some(FileRef {
+                    id,
+                    path: entry.path.as_str(),
+                    content: entry.content.as_ref(),
+                });
+            }
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if self.finalized {
+            (0, Some(self.files.size_hint().0))
+        } else {
+            (0, Some(0))
+        }
+    }
+}
+
+/// Renders a position as `path:line:column`, the conventional diagnostic
+/// anchor format.
+///
+/// Created by [`display_position`](SourceFilesMap::display_position). The
+/// renderer borrows the file path and formats lazily, so building it
+/// performs no allocation.
+///
+/// # Examples
+///
+/// ```
+/// use sourcier_core::{AbsolutePosition, SourceFilesMap};
+///
+/// let mut files = SourceFilesMap::<u8>::new();
+/// files.add_file("src/main.rs", b"fn main() {}").expect("fits");
+/// files.finalize().expect("fits");
+///
+/// let id = files.get_id("src/main.rs").expect("present");
+/// let pos = AbsolutePosition::new(id, 1, 4, 1, 7);
+/// assert_eq!(
+///     files.display_position(id, &pos).expect("known id").to_string(),
+///     "src/main.rs:1:4"
+/// );
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PositionDisplay<'a> {
+    path: &'a str,
+    line: u16,
+    column: u8,
+}
+
+impl fmt::Display for PositionDisplay<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}:{}", self.path, self.line, self.column)
+    }
 }
 
 /// Maximum byte length of a path stored inline inside its entry, without a
@@ -437,6 +516,95 @@ impl<Id: FileId> SourceFilesMap<Id> {
         Ok(())
     }
 
+    /// Registers a batch of files, reserving storage for the reported batch
+    /// size up front.
+    ///
+    /// The batch is all-or-nothing: when any registration fails (running out
+    /// of ids is the practical cause), every file added by the batch is
+    /// removed again, the byte total is restored and the map is left exactly
+    /// as it was. The error is reported unchanged, mirroring
+    /// [`add_file`](Self::add_file).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sourcier_core::SourceFilesMap;
+    ///
+    /// let mut files = SourceFilesMap::<u8>::new();
+    /// files
+    ///     .add_files([("a.txt", &b"alpha"[..]), ("b.txt", &b"beta"[..])])
+    ///     .expect("capacity available");
+    /// assert_eq!(files.len(), 2);
+    /// ```
+    pub fn add_files<I, P, C>(&mut self, files: I) -> Result<(), MapError>
+    where
+        I: IntoIterator<Item = (P, C)>,
+        P: AsRef<str>,
+        C: Into<Vec<u8>>,
+    {
+        let files = files.into_iter();
+        let (lower, _) = files.size_hint();
+        self.files.reserve(lower);
+
+        let rollback = self.files.len();
+        let mut failure = None;
+        for (path, content) in files {
+            if let Err(error) = self.add_file(path, content) {
+                failure = Some(error);
+                break;
+            }
+        }
+        if let Some(error) = failure {
+            self.files.truncate(rollback);
+            // The incremental byte total is only maintained on the happy
+            // path; recomputing it once over the retained entries restores
+            // it exactly, and this runs on the failure path only.
+            self.total_bytes = self.files.iter().map(|e| e.content.len()).sum();
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Registers a file from a [`Path`]-like value with its raw byte
+    /// content.
+    ///
+    /// A convenience over [`add_file`](Self::add_file) for tools that carry
+    /// `Path`/`PathBuf` values: the path is converted to the `str` form the
+    /// map stores. Paths that are not valid UTF-8 cannot be registered
+    /// losslessly and fail with [`MapError::PathNotUtf8`], carrying the
+    /// lossy rendering of the path; nothing is registered in that case.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sourcier_core::SourceFilesMap;
+    /// use std::path::PathBuf;
+    ///
+    /// let mut files = SourceFilesMap::<u8>::new();
+    /// files
+    ///     .add_path(PathBuf::from("src/main.rs"), b"fn main() {}")
+    ///     .expect("utf-8 path");
+    /// files.finalize().expect("fits");
+    ///
+    /// let id = files.get_id("src/main.rs").expect("present");
+    /// assert_eq!(files.get_path(id), Some("src/main.rs"));
+    /// ```
+    ///
+    /// [`Path`]: std::path::Path
+    pub fn add_path(
+        &mut self,
+        path: impl AsRef<std::path::Path>,
+        content: impl Into<Vec<u8>>,
+    ) -> Result<(), MapError> {
+        let path = path.as_ref();
+        let Some(path) = path.to_str() else {
+            return Err(MapError::PathNotUtf8 {
+                path: path.to_string_lossy().into_owned(),
+            });
+        };
+        self.add_file(path, content)
+    }
+
     /// Sorts the files by path, deduplicates paths, assigns one-based ids in
     /// path order and switches the map to its immutable lookup phase.
     ///
@@ -523,22 +691,12 @@ impl<Id: FileId> SourceFilesMap<Id> {
     /// Iterates over all files together with their ids.
     ///
     /// Returns nothing before finalization, because ids only exist afterwards.
-    pub fn iter(&self) -> impl Iterator<Item = FileRef<'_, Id>> {
-        let finalized = self.finalized;
-        self.files
-            .iter()
-            .enumerate()
-            .filter_map(move |(index, entry)| {
-                if !finalized {
-                    return None;
-                }
-                let id = Id::from_index(index)?;
-                Some(FileRef {
-                    id,
-                    path: entry.path.as_str(),
-                    content: entry.content.as_ref(),
-                })
-            })
+    pub fn iter(&self) -> Iter<'_, Id> {
+        Iter {
+            files: self.files.iter().enumerate(),
+            finalized: self.finalized,
+            marker: core::marker::PhantomData,
+        }
     }
 
     /// Returns the id assigned to `path`, or `None` for unknown paths and
@@ -660,6 +818,114 @@ impl<Id: FileId> SourceFilesMap<Id> {
         core::str::from_utf8(self.view(id, pos)?).ok()
     }
 
+    /// Converts a byte offset into a one-based point position.
+    ///
+    /// The result is a zero-width span whose start and end are the
+    /// `(line, column)` of the byte at `offset`. Offsets up to and including
+    /// the content length resolve: the content length maps to the column one
+    /// past the last byte, the conventional insertion anchor at the end of
+    /// the file.
+    ///
+    /// Returns `None` for unknown ids, unfinalized maps, offsets beyond the
+    /// content length, and offsets whose line or column cannot be
+    /// represented by the packed position encoding (files of more than
+    /// 65,535 lines or lines longer than 255 bytes).
+    ///
+    /// Requires the `view` feature. The conversion is O(log n) over the
+    /// per-file line index; it allocates nothing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sourcier_core::{AbsolutePosition, SourceFilesMap};
+    ///
+    /// let mut files = SourceFilesMap::<u8>::new();
+    /// files.add_file("a.txt", b"one\ntwo").expect("fits");
+    /// files.finalize().expect("fits");
+    ///
+    /// let id = files.get_id("a.txt").expect("present");
+    /// assert_eq!(
+    ///     files.position_from_offset(id, 4),
+    ///     Some(AbsolutePosition::new(id, 2, 1, 2, 1))
+    /// );
+    /// ```
+    #[cfg(feature = "view")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "view")))]
+    pub fn position_from_offset(&self, id: Id, offset: usize) -> Option<AbsolutePosition<Id>> {
+        let (line, col) = self.line_offsets_for(id)?.line_col_from_offset(offset)?;
+        // Lines longer than 255 bytes or files with more than 65,535 lines
+        // have components the packed encoding cannot represent.
+        let line = u16::try_from(line).ok()?;
+        let col = u8::try_from(col).ok()?;
+        Some(AbsolutePosition::new(id, line, col, line, col))
+    }
+
+    /// Converts the start of a position span into its byte offset.
+    ///
+    /// The end of the span is ignored: the returned offset anchors the
+    /// position's `(start_line, start_column)`. Returns `None` for unknown
+    /// ids, unfinalized maps, and spans whose start does not resolve to a
+    /// byte inside or at the end of the file.
+    ///
+    /// Requires the `view` feature. The conversion is O(log n) over the
+    /// per-file line index; it allocates nothing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sourcier_core::{AbsolutePosition, SourceFilesMap};
+    ///
+    /// let mut files = SourceFilesMap::<u8>::new();
+    /// files.add_file("a.txt", b"one\ntwo").expect("fits");
+    /// files.finalize().expect("fits");
+    ///
+    /// let id = files.get_id("a.txt").expect("present");
+    /// let span = AbsolutePosition::new(id, 2, 1, 2, 3);
+    /// assert_eq!(files.offset_from_position(id, &span), Some(4));
+    /// ```
+    #[cfg(feature = "view")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "view")))]
+    pub fn offset_from_position(&self, id: Id, pos: &impl SourceFilePosition) -> Option<usize> {
+        let offsets = self.line_offsets_for(id)?;
+        offsets.offset_from_line_col(pos.start_line() as usize, pos.start_column() as usize)
+    }
+
+    /// Prepares a zero-allocation `path:line:column` rendering of the
+    /// position's start, the conventional diagnostic anchor format.
+    ///
+    /// Returns `None` for unknown ids and unfinalized maps. The returned
+    /// value borrows the file path and only formats when displayed, so no
+    /// string is built until the value is rendered.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sourcier_core::{AbsolutePosition, SourceFilesMap};
+    ///
+    /// let mut files = SourceFilesMap::<u8>::new();
+    /// files.add_file("src/main.rs", b"fn main() {}").expect("fits");
+    /// files.finalize().expect("fits");
+    ///
+    /// let id = files.get_id("src/main.rs").expect("present");
+    /// let pos = AbsolutePosition::new(id, 1, 4, 1, 7);
+    /// assert_eq!(
+    ///     files.display_position(id, &pos).expect("known id").to_string(),
+    ///     "src/main.rs:1:4"
+    /// );
+    /// ```
+    pub fn display_position(
+        &self,
+        id: Id,
+        pos: &impl SourceFilePosition,
+    ) -> Option<PositionDisplay<'_>> {
+        let path = self.get_path(id)?;
+        Some(PositionDisplay {
+            path,
+            line: pos.start_line(),
+            column: pos.start_column(),
+        })
+    }
+
     /// Recomputes the per-file line offset indexes.
     ///
     /// Contents beyond the 4 GiB line offset limit of
@@ -752,6 +1018,16 @@ impl<Id: FileId> SourceFilesMap<Id> {
             #[cfg(feature = "view")]
             self.rebuild_line_offsets();
         }
+    }
+}
+
+impl<'a, Id: FileId> IntoIterator for &'a SourceFilesMap<Id> {
+    type Item = FileRef<'a, Id>;
+    type IntoIter = Iter<'a, Id>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
