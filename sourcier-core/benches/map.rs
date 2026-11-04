@@ -7,7 +7,7 @@ use std::hint::black_box;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 #[cfg(feature = "view")]
 use sourcier_core::AbsolutePosition;
-use sourcier_core::SourceFilesMap;
+use sourcier_core::{SourceFilesBuilder, SourceFilesMap};
 
 /// Builds `n` synthetic source files with realistic line structure.
 fn build_files(n: usize, lines_per_file: usize) -> Vec<(String, Vec<u8>)> {
@@ -50,6 +50,31 @@ fn bench_finalize(c: &mut Criterion) {
                     }
                     map.finalize().expect("fits");
                     black_box(map);
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+fn bench_builder(c: &mut Criterion) {
+    // The type-state builder must be free relative to the raw map flow:
+    // this mirrors the `finalize` group but routes through the builder API.
+    let mut group = c.benchmark_group("builder");
+    for (files, lines) in [(100_usize, 50_usize), (500, 100)] {
+        let entries = build_files(files, lines);
+        group.bench_with_input(
+            BenchmarkId::from_parameter(format!("{files}_files_{lines}_lines")),
+            &entries,
+            |b, entries| {
+                b.iter(|| {
+                    let mut builder = SourceFilesBuilder::<u16>::new();
+                    for (path, content) in entries {
+                        builder = builder
+                            .add_file(path.as_str(), content.as_slice())
+                            .expect("fits");
+                    }
+                    black_box(builder.finalize().expect("fits"));
                 });
             },
         );
@@ -141,6 +166,29 @@ fn bench_line_offsets(c: &mut Criterion) {
             black_box(map.view_str(id, &pos).expect("valid position"));
         });
     });
+
+    // The offset ⇄ position bridge over the same per-file index.
+    let probes: Vec<usize> = (0..1_000)
+        .map(|i| i * (entries[0].1.len() / 1_000))
+        .collect();
+    c.bench_function("position_from_offset/1000_probes", |b| {
+        b.iter(|| {
+            for offset in black_box(&probes) {
+                black_box(map.position_from_offset(id, *offset).expect("in range"));
+            }
+        });
+    });
+    let spans: Vec<_> = probes
+        .iter()
+        .map(|offset| map.position_from_offset(id, *offset).expect("in range"))
+        .collect();
+    c.bench_function("offset_from_position/1000_probes", |b| {
+        b.iter(|| {
+            for span in black_box(&spans) {
+                black_box(map.offset_from_position(id, span).expect("in range"));
+            }
+        });
+    });
 }
 
 #[cfg(not(feature = "view"))]
@@ -151,6 +199,7 @@ fn bench_line_offsets(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_finalize,
+    bench_builder,
     bench_get_id,
     bench_view,
     bench_line_offsets
