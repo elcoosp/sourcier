@@ -121,3 +121,60 @@ fn try_new_accepts_boundary_spans() {
     assert!(RelativePosition::try_new(65_535, 255, 65_535, 255).is_ok());
     assert!(RelativePosition::try_new(1, 1, 0, 255).is_err());
 }
+
+#[test]
+fn absolute_positions_strip_to_relative_positions() {
+    // Stripping the file id keeps every span component untouched, whatever
+    // the id width, so diagnostics can be stored file-agnostically.
+    let compact = AbsolutePosition::<u8>::new(9, 12, 34, 56, 78);
+    assert_eq!(compact.to_relative(), RelativePosition::new(12, 34, 56, 78));
+
+    let standard = StandardAbsolutePosition::new(65_000, 12, 34, 56, 78);
+    assert_eq!(
+        standard.to_relative(),
+        RelativePosition::new(12, 34, 56, 78)
+    );
+
+    // The `From` conversion is the same operation in trait form.
+    let via_from: RelativePosition = compact.into();
+    assert_eq!(via_from, RelativePosition::new(12, 34, 56, 78));
+}
+
+#[test]
+fn relative_positions_attach_file_ids() {
+    let rel = RelativePosition::new(3, 4, 5, 6);
+    let abs = rel.to_absolute(42_u8);
+    assert_eq!(abs.file_id(), 42);
+    assert_eq!(abs.start_line(), 3);
+    assert_eq!(abs.start_column(), 4);
+    assert_eq!(abs.end_line(), 5);
+    assert_eq!(abs.end_column(), 6);
+
+    // Attaching and stripping round trip for both id widths.
+    let round_trip = rel.to_absolute(65_000_u16).to_relative();
+    assert_eq!(round_trip, rel);
+}
+
+#[test]
+fn span_components_survive_the_relative_round_trip() {
+    let abs = StandardAbsolutePosition::new(12, 65_535, 255, 1, 2);
+    let rel = abs.to_relative();
+    assert_eq!(rel.start_line(), 65_535);
+    assert_eq!(rel.start_column(), 255);
+    assert_eq!(rel.end_line(), 1);
+    assert_eq!(rel.end_column(), 2);
+    assert_eq!(rel.to_absolute(12_u16), abs);
+}
+
+#[test]
+fn relative_positions_can_be_built_in_const_contexts() {
+    // Packed positions are documented stable encodings, so building one in a
+    // `const` item and reading its raw value must work.
+    const SPAN: RelativePosition = RelativePosition::new(2, 5, 2, 22);
+    const RAW: u64 = SPAN.as_raw();
+    const REBUILT: RelativePosition = RelativePosition::from_raw(RAW);
+
+    assert_eq!(RAW, RelativePosition::new(2, 5, 2, 22).as_raw());
+    assert_eq!(SPAN.start_line(), 2);
+    assert_eq!(REBUILT, SPAN);
+}
