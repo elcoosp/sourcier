@@ -101,6 +101,60 @@ mod tests {
         assert_eq!(u8::from_index(0), Some(1));
     }
 
+    #[test]
+    fn facade_resolves_the_builder_api() {
+        let files = SourceFilesBuilder::<u8>::new()
+            .add_file("a.txt", b"alpha")
+            .expect("fits")
+            .finalize()
+            .expect("fits");
+        assert_eq!(files.get_id("a.txt"), Some(1));
+
+        // Zero-allocation diagnostic rendering through the facade.
+        let display: PositionDisplay<'_> = files
+            .display_position(1, &RelativePosition::new(2, 3, 2, 3))
+            .expect("known id");
+        assert_eq!(display.to_string(), "a.txt:2:3");
+
+        // The finalized map iterates by reference.
+        let ids: Vec<u8> = (&files).into_iter().map(|entry| entry.id).collect();
+        assert_eq!(ids, vec![1]);
+
+        // Position interop round trips.
+        let rel: RelativePosition = AbsolutePosition::<u8>::new(1, 2, 3, 4, 5).into();
+        assert_eq!(
+            rel.to_absolute(1_u8).as_raw(),
+            AbsolutePosition::<u8>::new(1, 2, 3, 4, 5).as_raw()
+        );
+    }
+
+    #[test]
+    fn facade_resolves_the_path_registration_api() {
+        use std::path::PathBuf;
+
+        let files = SourceFilesBuilder::<u8>::new()
+            .add_path(PathBuf::from("b.txt"), b"beta")
+            .expect("utf-8 path")
+            .finalize()
+            .expect("fits");
+        assert_eq!(files.get_id("b.txt"), Some(1));
+    }
+
+    #[cfg(feature = "view")]
+    #[test]
+    fn facade_resolves_the_navigation_api() {
+        let files = SourceFilesBuilder::<u8>::new()
+            .add_file("a.txt", b"one\ntwo")
+            .expect("fits")
+            .finalize()
+            .expect("fits");
+        let id = files.get_id("a.txt").expect("present");
+
+        let pos = files.position_from_offset(id, 4).expect("in range");
+        assert_eq!(pos.start_line(), 2);
+        assert_eq!(files.offset_from_position(id, &pos), Some(4));
+    }
+
     #[cfg(feature = "view")]
     #[test]
     fn facade_resolves_the_view_api() {
