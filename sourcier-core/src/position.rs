@@ -150,8 +150,32 @@ impl<Id: FileId> AbsolutePosition<Id> {
     /// The layout is stable across semver-compatible releases; see the
     /// [`FileId`] documentation for the exact bit positions.
     #[inline]
-    pub fn as_raw(&self) -> u64 {
+    pub const fn as_raw(&self) -> u64 {
         self.0
+    }
+
+    /// Strips the file id, keeping only the span components.
+    ///
+    /// The result encodes the same start and end line/column in the
+    /// file-agnostic [`RelativePosition`] layout, so spans can be stored or
+    /// compared without binding them to a specific file.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sourcier_core::{AbsolutePosition, RelativePosition};
+    ///
+    /// let abs = AbsolutePosition::<u8>::new(7, 2, 5, 2, 22);
+    /// assert_eq!(abs.to_relative(), RelativePosition::new(2, 5, 2, 22));
+    /// ```
+    #[inline]
+    pub fn to_relative(self) -> RelativePosition {
+        RelativePosition::new(
+            self.start_line(),
+            self.start_column(),
+            self.end_line(),
+            self.end_column(),
+        )
     }
 
     /// Returns the file id component.
@@ -254,12 +278,17 @@ impl RelativePosition {
     ///
     /// This constructor is infallible and performs no validation. Use
     /// [`try_new`](Self::try_new) for a checked variant.
+    ///
+    /// The constructor is a constant function, so spans can be built and
+    /// stored in `const` or `static` items.
     #[inline]
-    pub fn new(start_line: u16, start_col: u8, end_line: u16, end_col: u8) -> Self {
-        let encoded = (u64::from(start_line) << Self::START_LINE_SHIFT)
-            | ((u64::from(start_col)) << Self::START_COL_SHIFT)
-            | ((u64::from(end_line)) << Self::END_LINE_SHIFT)
-            | (u64::from(end_col));
+    pub const fn new(start_line: u16, start_col: u8, end_line: u16, end_col: u8) -> Self {
+        // Widening integer casts are lossless and constant-stable, unlike
+        // the `From<u64>` conversions used by the non-const counterparts.
+        let encoded = ((start_line as u64) << Self::START_LINE_SHIFT)
+            | ((start_col as u64) << Self::START_COL_SHIFT)
+            | ((end_line as u64) << Self::END_LINE_SHIFT)
+            | (end_col as u64);
         Self(encoded)
     }
 
@@ -290,16 +319,43 @@ impl RelativePosition {
     /// Rebuilds a relative position from its raw 64-bit representation.
     ///
     /// The high 16 bits must be zero for the round trip to be lossless; use
-    /// [`as_raw`](Self::as_raw) to obtain compatible values.
+    /// [`as_raw`](Self::as_raw) to obtain compatible values. Like
+    /// [`new`](Self::new), this is a constant function.
     #[inline]
-    pub fn from_raw(raw: u64) -> Self {
+    pub const fn from_raw(raw: u64) -> Self {
         Self(raw & 0x0000_FFFF_FFFF_FFFF)
     }
 
     /// Returns the raw 64-bit representation.
     #[inline]
-    pub fn as_raw(&self) -> u64 {
+    pub const fn as_raw(&self) -> u64 {
         self.0
+    }
+
+    /// Attaches a file id, turning the span into an
+    /// [`AbsolutePosition`].
+    ///
+    /// The span components are re-encoded into the absolute layout of the
+    /// given [`FileId`] type; nothing else changes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sourcier_core::{AbsolutePosition, RelativePosition};
+    ///
+    /// let rel = RelativePosition::new(2, 5, 2, 22);
+    /// let abs = rel.to_absolute(3_u8);
+    /// assert_eq!(abs, AbsolutePosition::<u8>::new(3, 2, 5, 2, 22));
+    /// ```
+    #[inline]
+    pub fn to_absolute<Id: FileId>(self, file_id: Id) -> AbsolutePosition<Id> {
+        AbsolutePosition::new(
+            file_id,
+            self.start_line(),
+            self.start_column(),
+            self.end_line(),
+            self.end_column(),
+        )
     }
 }
 
@@ -348,6 +404,12 @@ pub type CompactAbsolutePosition = AbsolutePosition<u8>;
 
 /// Absolute position using `u16` file ids, supporting up to 65,535 files.
 pub type StandardAbsolutePosition = AbsolutePosition<u16>;
+
+impl<Id: FileId> From<AbsolutePosition<Id>> for RelativePosition {
+    fn from(abs: AbsolutePosition<Id>) -> Self {
+        abs.to_relative()
+    }
+}
 
 #[cfg(test)]
 mod tests {
