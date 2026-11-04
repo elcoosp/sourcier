@@ -10,12 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add type-state `SourceFilesBuilder` with chaining registration (`add_file`/`add_file_mut`), atomic `add_files`/`add_files_mut` batches, `remaining_capacity` and path-type support, making the build/lookup phase errors unrepresentable at compile time
+- Add all-or-nothing `SourceFilesMap::add_files` batch registration that reserves storage up front and rolls back on failure
+- Add `SourceFilesMap::position_from_offset` and `SourceFilesMap::offset_from_position`, an O(log n) zero-allocation bridge between byte offsets and packed positions over the existing line index (`view`)
+- Add `SourceFilesMap::display_position` and `PositionDisplay` for zero-allocation `path:line:column` diagnostic rendering
+- Add `AbsolutePosition::to_relative`, `RelativePosition::to_absolute` and `From<AbsolutePosition<Id>> for RelativePosition` span conversions
+- Add `const fn` constructors `RelativePosition::new`/`from_raw` and `const` raw accessors for both position kinds
+- Add `SourceFilesMap::add_path` (and builder variants) for `Path`/`PathBuf` registration with the new `MapError::PathNotUtf8` variant reporting the lossy path
+- Add `Iter` named iterator for `SourceFilesMap::iter` and `IntoIterator for &SourceFilesMap`
+- Add `builder/*`, `position_from_offset/*` and `offset_from_position/*` benchmark tracks pinning the cost of the new APIs
 - Configure workspace for 1.0.0 release and add sourcier facade by @elcoosp
 - Update metadata, dependencies, and benchmark setup (core) by @elcoosp
 - Expose line starts accessor and optimize vector initialization (core) by @elcoosp
 - Build verified open-addressed index and inline path storage (core) by @elcoosp
 
 ### Changed
+- Fix stale `1.0` dependency snippet in the README feature-trim example
 - Remove obsolete clo module (core) by @elcoosp
 - Remove obsolete fid module (core) by @elcoosp
 - Restructure modules and improve crate-level documentation (core) by @elcoosp
