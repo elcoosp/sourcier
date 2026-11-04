@@ -148,7 +148,8 @@ fn iteration_matches_direct_lookups() {
     files.add_file("two.txt", b"2222").expect("fits");
     files.finalize().expect("fits");
 
-    for entry in files.iter() {
+    // The map is iterable by reference, like any standard collection.
+    for entry in &files {
         assert_eq!(files.get_path(entry.id), Some(entry.path));
         assert_eq!(files.get_content(entry.id), Some(entry.content));
         assert_eq!(files.get(entry.id).expect("present"), entry);
@@ -178,4 +179,50 @@ fn maps_support_default_and_clone_like_values() {
     assert_eq!(clone.get_path(id), Some("a.rs"));
     assert_eq!(clone.get_content(id), Some(&b"alpha"[..]));
     assert_eq!(clone.total_bytes(), files.total_bytes());
+}
+
+#[test]
+fn add_path_accepts_path_types() {
+    use std::path::{Path, PathBuf};
+
+    let mut files = SourceFilesMap::<u8>::new();
+    files
+        .add_path(Path::new("src/lib.rs"), b"pub mod a;")
+        .expect("utf-8 path");
+    files
+        .add_path(PathBuf::from("src/main.rs"), b"fn main() {}")
+        .expect("utf-8 path");
+    files.finalize().expect("fits");
+
+    // Paths are registered under their UTF-8 form and looked up as &str.
+    let id = files.get_id("src/main.rs").expect("present");
+    assert_eq!(files.get_path(id), Some("src/main.rs"));
+    assert_eq!(files.get_content(id), Some(&b"fn main() {}"[..]));
+    assert_eq!(files.len(), 2);
+}
+
+#[test]
+fn add_path_reports_invalid_utf8_without_registering() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let mut files = SourceFilesMap::<u8>::new();
+    files.add_file("valid.txt", b"v").expect("fits");
+    let bytes_before = files.total_bytes();
+
+    // A path with invalid UTF-8 bytes cannot be stored losslessly.
+    let invalid = OsStr::from_bytes(b"caf\xe9.txt");
+    let error = files.add_path(invalid, b"x").expect_err("invalid utf-8");
+    match error {
+        MapError::PathNotUtf8 { path } => {
+            assert_eq!(path, "caf\u{FFFD}.txt", "the lossy path is reported");
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+
+    // The failed registration leaves the map untouched.
+    assert_eq!(files.len(), 1);
+    assert_eq!(files.total_bytes(), bytes_before);
+    files.finalize().expect("fits");
+    assert!(files.get_id("valid.txt").is_some());
 }
