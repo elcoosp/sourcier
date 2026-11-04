@@ -10,22 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Add type-state `SourceFilesBuilder` with chaining registration (`add_file`/`add_file_mut`), atomic `add_files`/`add_files_mut` batches, `remaining_capacity` and path-type support, making the build/lookup phase errors unrepresentable at compile time
-- Add all-or-nothing `SourceFilesMap::add_files` batch registration that reserves storage up front and rolls back on failure
-- Add `SourceFilesMap::position_from_offset` and `SourceFilesMap::offset_from_position`, an O(log n) zero-allocation bridge between byte offsets and packed positions over the existing line index (`view`)
-- Add `SourceFilesMap::display_position` and `PositionDisplay` for zero-allocation `path:line:column` diagnostic rendering
-- Add `AbsolutePosition::to_relative`, `RelativePosition::to_absolute` and `From<AbsolutePosition<Id>> for RelativePosition` span conversions
-- Add `const fn` constructors `RelativePosition::new`/`from_raw` and `const` raw accessors for both position kinds
-- Add `SourceFilesMap::add_path` (and builder variants) for `Path`/`PathBuf` registration with the new `MapError::PathNotUtf8` variant reporting the lossy path
-- Add `Iter` named iterator for `SourceFilesMap::iter` and `IntoIterator for &SourceFilesMap`
-- Add `builder/*`, `position_from_offset/*` and `offset_from_position/*` benchmark tracks pinning the cost of the new APIs
 - Configure workspace for 1.0.0 release and add sourcier facade by @elcoosp
 - Update metadata, dependencies, and benchmark setup (core) by @elcoosp
 - Expose line starts accessor and optimize vector initialization (core) by @elcoosp
 - Build verified open-addressed index and inline path storage (core) by @elcoosp
+- Add MapError::PathNotUtf8 for non-UTF-8 path registration (error) by @elcoosp
+- Const-ify constructors and add span conversions (position) by @elcoosp
+- Add batch/path registration, offset bridge and PositionDisplay (map) by @elcoosp
+- Add the type-state SourceFilesBuilder (builder) by @elcoosp
+- Wire the builder module and re-export the new types (core) by @elcoosp
 
 ### Changed
-- Fix stale `1.0` dependency snippet in the README feature-trim example
 - Remove obsolete clo module (core) by @elcoosp
 - Remove obsolete fid module (core) by @elcoosp
 - Restructure modules and improve crate-level documentation (core) by @elcoosp
@@ -39,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Draft release notes for version 2.0.0 (changelog) by @elcoosp
 - Add performance comparison report from 1.0 to 2.0 (maintainer) by @elcoosp
 - Rewrite specifications targeting zero allocation finalization (readme) by @elcoosp
+- Document the builder, offset bridge and path registration (readme) by @elcoosp
+- Fold the 2.0.0 section into Unreleased and add the DX entries (changelog) by @elcoosp
 
 ### Miscellaneous
 - Overhaul release workflow with manual publishing and git-cliff by @elcoosp
@@ -61,9 +58,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update commit.sh by @elcoosp
 - Rm sh file by @elcoosp
 - Rm chore file by @elcoosp
+- Update changelog by @github-actions[bot]
 
 ### Performance
 - Add misses testing tracks and line-col navigation benchmarks (core) by @elcoosp
+- Add builder and offset-bridge benchmark tracks (benches) by @elcoosp
 
 ### Tests
 - Remove obsolete monolithic tests file (core) by @elcoosp
@@ -86,6 +85,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update snapshot file assertions tracking lookup tables removal (core) by @elcoosp
 - Update snapshot file assertions tracking lookup tables removal (core) by @elcoosp
 - Implement test cases checking raw offset ranges accessors (core) by @elcoosp
+- Cover the builder, path and navigation APIs (facade) by @elcoosp
+- Cover the type-state builder and atomic batches (core) by @elcoosp
+- Cover the offset bridge and diagnostic rendering (core) by @elcoosp
+- Cover add_path and by-reference iteration on the raw map (core) by @elcoosp
+- Cover span conversions and const constructors (core) by @elcoosp
+- Register the builder and navigation test modules (core) by @elcoosp
 
 ## [0.1.0] - 2025-12-19
 
