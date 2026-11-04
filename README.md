@@ -91,6 +91,57 @@ assert!(AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1).is_err());
 assert!(AbsolutePosition::<u8>::try_new(1, 1, 1, 1, 1).is_ok());
 ```
 
+### Type-state builder
+
+The two-phase lifecycle is also available in a form the compiler enforces: `SourceFilesBuilder` only exposes registration, `finalize` consumes it and hands back the lookup-ready map, so `MapError::Finalized` and `MapError::AlreadyFinalized` cannot happen:
+
+```rust
+use sourcier::{SourceFilesBuilder, SourceFilePosition};
+
+let files = SourceFilesBuilder::<u8>::new()
+    .add_file("src/main.rs", b"fn main() {}")
+    .expect("capacity available")
+    .add_file("src/lib.rs", b"pub mod utils;")
+    .expect("capacity available")
+    .finalize()
+    .expect("no capacity issue");
+
+let id = files.get_id("src/main.rs").expect("file present");
+let pos = files.position_from_offset(id, 4).expect("in range");
+assert_eq!(pos.start_line(), 1);
+
+// Diagnostics render as `path:line:column` without allocating.
+assert_eq!(files.display_position(id, &pos).expect("present").to_string(), "src/main.rs:1:5");
+```
+
+Loops use `add_file_mut`; batches use `add_files`, which is all-or-nothing — a failed batch leaves the builder or map exactly as it was. `remaining_capacity` reports how many more files the id type can address.
+
+### Byte offsets and positions
+
+With the default `view` feature, the map bridges between byte offsets and packed positions in O(log n) over the per-file line index, with no allocation:
+
+- `position_from_offset(id, offset)` maps a byte offset (including the end-of-file insertion anchor) to a point position.
+- `offset_from_position(id, &pos)` maps the start of any span back to its byte offset.
+- `display_position(id, &pos)` renders `path:line:column` lazily through a borrowed `PositionDisplay`.
+
+Spans move between the packed encodings with `AbsolutePosition::to_relative` and `RelativePosition::to_absolute`; `RelativePosition::new` and `from_raw` are `const fn`, so spans can be built in `const` and `static` items.
+
+### Registering paths
+
+`add_file` takes any `AsRef<str>`. Tools holding `Path`/`PathBuf` values register through `add_path`, which fails with `MapError::PathNotUtf8` (carrying the lossy path) when the OS path is not valid UTF-8:
+
+```rust
+use sourcier::{SourceFilesBuilder, MapError};
+use std::path::PathBuf;
+
+let files = SourceFilesBuilder::<u8>::new()
+    .add_path(PathBuf::from("src/main.rs"), b"fn main() {}")
+    .expect("utf-8 path")
+    .finalize()
+    .expect("no capacity issue");
+assert_eq!(files.get_id("src/main.rs"), Some(1));
+```
+
 ### Bit layout
 
 Positions are stable `u64` encodings. The table shows the bit range of each field, most significant first:
@@ -122,7 +173,7 @@ Trim them for a leaner build:
 
 ```toml
 [dependencies]
-sourcier = { version = "1.0", default-features = false, features = ["view"] }
+sourcier = { version = "2.0", default-features = false, features = ["view"] }
 ```
 
 ## API overview
@@ -130,6 +181,7 @@ sourcier = { version = "1.0", default-features = false, features = ["view"] }
 | Type / trait                      | Purpose                                                         |
 | --------------------------------- | --------------------------------------------------------------- |
 | `SourceFilesMap<Id>`              | Build phase: register files. Lookup phase: query by path or id. |
+| `SourceFilesBuilder<Id>`          | Type-state build phase: chaining registration, compile-time phase separation. |
 | `FileId`                          | Sealed trait implemented by `u8` and `u16`.                     |
 | `AbsolutePosition<Id>`            | Span bound to a file, packed into one `u64`.                    |
 | `RelativePosition`                | File-agnostic span packed into the low 48 bits of a `u64`.      |
@@ -137,6 +189,9 @@ sourcier = { version = "1.0", default-features = false, features = ["view"] }
 | `LineOffsets` (`view`)            | Compact per-line byte offset index with line/col mapping.       |
 | `RuntimeFeedback` (`rt-feedback`) | Atomic counters shared across maps via `Arc`.                   |
 | `line_offsets` (`view`)           | Accessor over the per-file index behind `view`.                 |
+| `position_from_offset` (`view`)   | Byte offset → point position, O(log n), no allocation.          |
+| `offset_from_position` (`view`)   | Span start → byte offset, O(log n), no allocation.              |
+| `display_position` / `PositionDisplay` | Zero-allocation `path:line:column` diagnostic rendering.   |
 | `MapError`, `PositionError`       | Typed, `non_exhaustive` error enums.                            |
 
 ## Performance
@@ -165,6 +220,7 @@ Design notes:
 - Per-file line offsets live in a dense `Vec<Option<LineOffsets>>` indexed by id — `view` pays no hashing on its hot path.
 - Serialized map payloads carry only the raw entries and the phase flag; lookup state is rebuilt on load (v1 payloads with the redundant `path_to_id` table still deserialize).
 - `rt-feedback` uses atomics only; no locks are taken on the reporting path.
+- The DX additions (builder, offset⇄position bridge, `PositionDisplay`, batch registration) are pure additions that delegate to the existing machinery: the builder is an inline newtype over the map, the offset bridge reuses the per-file `LineOffsets` index, and `PositionDisplay` renders lazily from borrowed data. The `builder/*`, `position_from_offset/*` and `offset_from_position/*` benchmark tracks pin their cost; the original `finalize`, `get_id`, `view` and `line_offsets` tracks are unchanged.
 
 ## Testing and verification
 
