@@ -1,0 +1,80 @@
+---
+title: Changelog
+description: Release history of Sourcier, currently version 2.0 with the builder, offset bridge and verified path index.
+type: reference
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+This page summarizes the release history. The canonical, generated changelog
+lives in [CHANGELOG.md](https://github.com/elcoosp/sourcier/blob/main/CHANGELOG.md)
+and is produced with git-cliff from the commit history.
+
+## 2.0 (current)
+
+The 2.0 release line focuses on the developer experience around the core
+engine and on a leaner, safer lookup path.
+
+### Added
+
+- The type-state `SourceFilesBuilder`: chaining registration with
+  compile-time phase separation, `add_file_mut` for loops, and
+  `remaining_capacity`.
+- All-or-nothing batch registration with `add_files`.
+- OS-path registration with `add_path` and a dedicated
+  `MapError::PathNotUtf8` for non-UTF-8 paths.
+- The offset bridge: `position_from_offset` and `offset_from_position`
+  convert between byte offsets and packed positions in O(log n) with no
+  allocation.
+- `PositionDisplay` and `display_position` render `path:line:column`
+  diagnostics without allocating.
+- Const constructors and span conversions for positions
+  (`RelativePosition::new` and `from_raw` are `const fn`).
+- A verified open-addressed path index with inline path storage (paths up to
+  30 bytes live inside their entry, with no heap allocation).
+- Exposed line starts accessor and optimized vector initialization in the
+  core engine.
+
+### Changed
+
+- Removed the obsolete `clo`, `fid` and `sfm` modules and restructured the
+  core modules.
+- Enriched crate-level documentation with memory-footprint metrics.
+- The `parallel` feature is forwarded from the facade to the core library.
+
+### Performance
+
+- Finalization improved by 25-35% across benchmark scenarios.
+- Multi-line `view` extractions improved by 70%.
+- The path-to-id index trades ~20% hit latency for byte-exact verification,
+  HashDoS-resistant per-map seeding, zero allocations at finalization and
+  roughly half the lookup-state memory.
+
+### Compatibility
+
+- The 2.0 wire format of `SourceFilesMap` dropped the redundant
+  `path_to_id` table; it is derived from the sorted entries and rebuilt on
+  load.
+- 1.0 payloads that still carry the field deserialize without error and are
+  ignored.
+
+## 0.1.0 (2025-12-19)
+
+First public release:
+
+- `fid`, `sfm` and `sfp` modules for compact `u64` position representation
+  and O(1) path-to-id mapping.
+- `SourceFilesMap` with content storage and `get_content`.
+- `RuntimeFeedback` proof of concept with `with_feedback`.
+- The `view` feature and optional `serde` support.
+
+<Aside type="note">
+        In the repository, the 2.0.0 section currently sits under the Unreleased
+        heading of the generated changelog; the workspace version in Cargo.toml
+        is 2.0.0.
+</Aside>
+
+## Next steps
+
+- Read the full [changelog on GitHub](https://github.com/elcoosp/sourcier/blob/main/CHANGELOG.md).
+- Check <LinkCard title="The two-phase lifecycle" href="/explanation/two-phase-lifecycle/" /> for the design the 2.0 builder formalizes.
