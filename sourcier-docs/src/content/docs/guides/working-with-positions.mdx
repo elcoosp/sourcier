@@ -1,0 +1,151 @@
+---
+title: Working with positions
+description: Create packed spans with checked and unchecked constructors, convert between absolute and relative forms, and order or serialize them.
+type: how-to
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Use this guide to create, validate, convert, order and serialize packed
+positions. Two types cover the two situations you meet in a tool:
+`AbsolutePosition<Id>` addresses a span in a specific file of a map, and
+`RelativePosition` carries only the span — start line, start column, end
+line, end column — so you can store or compare it without binding it to a
+file.
+
+## Create an absolute position
+
+`AbsolutePosition::new` packs the five components as-is. It is infallible and
+zero-cost:
+
+```rust
+use sourcier::AbsolutePosition;
+
+// file id 7, start 2:5, end 2:22 (inclusive).
+let pos = AbsolutePosition::<u8>::new(7, 2, 5, 2, 22);
+```
+
+Lines and columns are one-based; the end line and end column are inclusive.
+The packed value orders like a natural lexicographic ordering of spans, so
+positions sort with integer comparison.
+
+## Validate spans with checked constructors
+
+When a span comes from user input or an untrusted source, use `try_new`. It
+returns `PositionError::InvalidRange` when any line or column is zero, or
+when the start does not come before (or exactly at) the end:
+
+```rust
+use sourcier::AbsolutePosition;
+
+assert!(AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1).is_err());
+assert!(AbsolutePosition::<u8>::try_new(1, 1, 5, 1, 4).is_err());
+assert!(AbsolutePosition::<u8>::try_new(1, 1, 1, 1, 1).is_ok());
+assert!(AbsolutePosition::<u8>::try_new(1, 1, 4, 1, 5).is_ok());
+```
+
+`RelativePosition::try_new` applies the same rules to file-agnostic spans.
+
+## Convert between absolute and relative
+
+Strip the file id with `to_relative`, and attach one with
+`RelativePosition::to_absolute`:
+
+```rust
+use sourcier::{AbsolutePosition, RelativePosition};
+
+let abs = AbsolutePosition::<u8>::new(7, 2, 5, 2, 22);
+assert_eq!(abs.to_relative(), RelativePosition::new(2, 5, 2, 22));
+
+let rel = RelativePosition::new(2, 5, 2, 22);
+assert_eq!(rel.to_absolute(3_u8), AbsolutePosition::<u8>::new(3, 2, 5, 2, 22));
+```
+
+`From<AbsolutePosition<Id>> for RelativePosition` is also implemented, so
+`let rel: RelativePosition = abs.into();` works.
+
+## Build spans in const contexts
+
+`RelativePosition::new` and `RelativePosition::from_raw` are `const fn`, so
+spans can be built and stored in `const` and `static` items:
+
+```rust
+use sourcier::RelativePosition;
+
+const STD_SPAN: RelativePosition = RelativePosition::new(1, 1, 1, 1);
+```
+
+<Aside type="note">
+	`AbsolutePosition::new` is not a `const fn` because it routes the id
+	through the `FileId` trait; use the const `RelativePosition` constructors
+	when you need compile-time packing.
+</Aside>
+
+## Round-trip through the raw encoding
+
+`as_raw` returns the stable `u64` encoding and `from_raw` rebuilds a
+position from it. For absolute positions, `from_raw` returns `None` when the
+embedded file id cannot be represented by `Id` — including the
+never-assigned id `0`:
+
+```rust
+use sourcier::AbsolutePosition;
+
+let pos = AbsolutePosition::<u8>::new(42, 1, 2, 3, 4);
+let copy = AbsolutePosition::<u8>::from_raw(pos.as_raw()).expect("valid raw value");
+assert_eq!(pos, copy);
+```
+
+The bit layout is stable across semver-compatible releases, so raw values
+can be persisted safely. See [Position encoding](/reference/position-encoding/)
+for the exact bit ranges.
+
+## Order and compare
+
+Positions derive `PartialOrd` and `Ord`. Ordering by the packed value equals
+ordering spans lexicographically: file id first, then start line, start
+column, end line and end column:
+
+```rust
+use sourcier::AbsolutePosition;
+
+let a = AbsolutePosition::<u8>::new(1, 1, 1, 1, 1);
+let b = AbsolutePosition::<u8>::new(1, 1, 1, 1, 2);
+let c = AbsolutePosition::<u8>::new(1, 2, 1, 2, 1);
+let d = AbsolutePosition::<u8>::new(2, 1, 1, 1, 1);
+assert!(a < b && b < c && c < d);
+```
+
+## Serialize positions
+
+With the default `serde` feature, both position types implement
+`Serialize` and `Deserialize`, and a round trip preserves the bits exactly:
+
+```rust
+use sourcier::RelativePosition;
+
+let pos = RelativePosition::new(2, 5, 3, 10);
+let json = serde_json::to_string(&pos).expect("serializable");
+assert_eq!(serde_json::from_str::<RelativePosition>(&json).expect("valid"), pos);
+```
+
+## Render spans as text
+
+`Display` renders `start_line:start_column-end_line:end_column`:
+
+```rust
+use sourcier::{AbsolutePosition, RelativePosition};
+
+assert_eq!(AbsolutePosition::<u8>::new(1, 10, 5, 12, 20).to_string(), "10:5-12:20");
+assert_eq!(RelativePosition::new(2, 5, 2, 22).to_string(), "2:5-2:22");
+```
+
+To render a position together with its file path as `path:line:column`, use
+`display_position` on a finalized map — see
+[Views and navigation](/guides/navigating-source/).
+
+## Next steps
+
+- Follow <LinkCard title="Views and navigation" href="/guides/navigating-source/" /> to bridge byte offsets and positions.
+- Check <LinkCard title="Position encoding" href="/reference/position-encoding/" /> before persisting raw values.
+- Check <LinkCard title="Errors" href="/reference/errors/" /> for the exact shape of `PositionError::InvalidRange`.
