@@ -1,0 +1,32 @@
+{
+        // Markdownlint configuration for the Sourcier docs (MDX).
+        "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint/main/schema/markdownlint-config-schema.json",
+        "config": {
+                "default": true,
+                // Line length is a rendering concern; MDX prose reflows freely.
+                "MD013": false,
+                // MDX uses JSX components (Card, Aside, Tabs, ...) throughout.
+                "MD033": false,
+                // Bold text is used for UI labels and inline emphasis.
+                "MD036": false,
+                // Pages start with YAML frontmatter, not a level-1 heading.
+                "MD041": false,
+                // Repeated headings across sibling pages/sections are intentional.
+                "MD024": { "siblings_only": true },
+                // Frontmatter title is the page title.
+                "MD025": { "front_matter_title": "" },
+                // Adjacent asides/lists around components trip this falsely.
+                "MD028": false,
+                // Bare URLs appear inside tables where autolinks would break MDX.
+                "MD034": false,
+                // Hard tabs are the code style of this project (Astro/Starlight
+                // convention, including tab-indented code inside list items).
+                "MD010": false,
+                // Fenced code blocks are used everywhere, including inside list
+                // items; consistency with indented blocks is not desired.
+                "MD046": false,
+                // Tables are aligned with padded cells for readability.
+                "MD060": { "style": "padded" }
+        },
+        "ignores": ["node_modules/", "dist/", ".astro/", ".qa/"]
+}
