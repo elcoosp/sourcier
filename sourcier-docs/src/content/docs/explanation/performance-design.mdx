@@ -1,0 +1,103 @@
+---
+title: Performance design
+description: The data structures behind the benchmarks — the verified path index, inline path storage, memchr line scans and the rebuilt-on-load wire format.
+type: explanation
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Sourcier's performance comes from a small set of data-structure decisions,
+each of which trades complexity in one place for a constant-factor win where
+tools spend their time. This page walks through those decisions and the
+numbers they produce. All measurements come from the bundled criterion suite
+(`cargo bench -p sourcier-core`) on the reference machine, comparing 2.0
+against the 1.0 baseline in the same measurement window; treat the numbers
+as indicative.
+
+## A verified open-addressed path index
+
+Path lookups run through a per-map open-addressed index from path hash to
+entry. Three properties define it:
+
+- **Seeded per map.** The hash uses two parallel multiply chains and one
+  combine multiply with a seed that differs per map, so adversarial
+  collision patterns cannot be precomputed (HashDoS resistance).
+- **Verified probes.** A hash match is only a prefilter: every probe is
+  verified against the stored path bytes. Collisions can never produce a
+  wrong answer, whatever the hash quality.
+- **Dense and predictable.** Linear probing at a load factor of 0.5 with 4
+  bytes per slot; probes terminate on the first empty slot, so misses are as
+  cheap as hits.
+
+The measured trade-off: 2.0 spends about 20% more latency on hits
+(~41 us vs ~34 us per 2,000 lookups) in exchange for byte-exact
+verification, zero allocations at finalization and roughly half the
+lookup-state memory. Misses, at ~33 us per 2,000, are a new tracked
+scenario.
+
+## Inline path storage
+
+Entries store paths with short-string optimization: paths up to 30 bytes
+live inline inside the 32-byte payload, and longer paths fall back to a
+`Box<str>`. Most source-tree paths fit the inline bound, which keeps the hot
+lookup path at two dependent cache lines — the index slot and the entry —
+and makes finalization allocation-free for typical trees.
+
+## One sort, one pass
+
+Finalization is a single unstable sort with a registration-order tiebreak
+plus one O(n) pass that assigns ids and builds the index. File contents are
+never copied during finalization. The measured effect:
+
+| Scenario | 1.0 | 2.0 | Change |
+| -------- | --- | --- | ------ |
+| Finalize 100 files × 50 lines | ~64 us | ~41 us | **-35%** |
+| Finalize 500 files × 100 lines | ~709 us | ~513 us | **-28%** |
+| Finalize phase only, 2,000 × 200 lines | ~3.7 ms | ~2.8 ms | **-25%** |
+
+## memchr line scans
+
+The `view` feature indexes every file's line boundaries with a single
+`memchr`-accelerated scan — the 1.0 counting pre-pass is gone — and stores 4
+bytes per line as `u32` offsets, which caps indexable files at 4 GiB. Line
+and column navigation is binary search over that compact list:
+
+| Scenario | 1.0 | 2.0 | Change |
+| -------- | --- | --- | ------ |
+| 1,000 multi-line `view` extractions | ~14.4 us | ~4.4 us | **-70%** |
+| Line offsets for 100 files × 1,000 lines | ~0.79 ms | ~0.69 ms | **-12%** |
+| 1,000 offset-to-(line, col) probes | — | ~8.2 us | new |
+| Single-line `view_str` span | — | ~257 ns | new |
+
+Per-file line offsets live in a dense `Vec<Option<LineOffsets>>` indexed by
+id, so the view hot path performs no hashing at all. The opt-in `parallel`
+feature spreads the scan across cores with `rayon`; on the 2-core reference
+VM the thread-pool overhead outweighed the scan savings, which is why it is
+not a default.
+
+<Aside type="note">
+	The `builder/*`, `position_from_offset/*` and `offset_from_position/*`
+	benchmark tracks pin the cost of the 2.0 additions; the original
+	`finalize`, `get_id`, `view` and `line_offsets` tracks are unchanged.
+</Aside>
+
+## The wire format carries data, not derived state
+
+Serialized payloads contain only the raw entries and the phase flag. The
+redundant `path_to_id` table of the 1.0 format is gone: the index is derived
+from the sorted entries and rebuilt on load, and 1.0 payloads still
+deserialize with the redundant field ignored. The entry hash and sequence
+number are likewise derived state — the hash depends on the per-map seed —
+so they are rebuilt rather than persisted.
+
+The DX additions delegate to the same machinery rather than adding new
+paths: the builder is an inline newtype over the map, the offset bridge
+reuses the per-file `LineOffsets` index, and `PositionDisplay` renders
+lazily from borrowed data. `rt-feedback` uses atomics only; no locks are
+taken on the reporting path.
+
+## Next steps
+
+- Follow <LinkCard title="Tuning performance" href="/guides/tuning-performance/" /> to apply these characteristics in your build.
+- Read <LinkCard title="The two-phase lifecycle" href="/explanation/two-phase-lifecycle/" /> for the phase boundary that makes the index possible.
+- Check <LinkCard title="Position encoding" href="/reference/position-encoding/" /> for the packed layouts behind the numbers.
