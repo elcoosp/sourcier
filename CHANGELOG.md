@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add batch/path registration, offset bridge and PositionDisplay (map) by @elcoosp
 - Add the type-state SourceFilesBuilder (builder) by @elcoosp
 - Wire the builder module and re-export the new types (core) by @elcoosp
+- Scaffold starlight documentation site configuration (docs) by @elcoosp
+- Write strict content collection schemes (docs) by @elcoosp
+- Assemble customized error layout framework (docs) by @elcoosp
 
 ### Changed
 - Remove obsolete clo module (core) by @elcoosp
@@ -29,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enrich top level documentation mapping memory footprint metrics (core) by @elcoosp
 - Forward parallel compilation flag features to the core library by @elcoosp
 
+### Code Style
+- Configure markdownlint settings for MDX prose (docs) by @elcoosp
+- Provision tracing-optimized brand favicon asset (docs) by @elcoosp
+- Trace svgo optimized vector brand logo symbol (docs) by @elcoosp
+
 ### Documentation
 - Overhaul README with comprehensive documentation and examples by @elcoosp
 - Draft release notes for version 2.0.0 (changelog) by @elcoosp
@@ -36,6 +44,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rewrite specifications targeting zero allocation finalization (readme) by @elcoosp
 - Document the builder, offset bridge and path registration (readme) by @elcoosp
 - Fold the 2.0.0 section into Unreleased and add the DX entries (changelog) by @elcoosp
+- Add handbook for human and AI contributors (agents) by @elcoosp
+- Record adr 0001 pinning typescript to 6.x (adr) by @elcoosp
+- Record adr 0002 detailing vector logo tracing strategy (adr) by @elcoosp
+- Record adr 0003 selecting shiki grammar highlighting (adr) by @elcoosp
+- Record adr 0004 formalizing playwright screenshot pipeline (adr) by @elcoosp
+- Record adr 0005 documenting napi-rs emnapi override (adr) by @elcoosp
+- Record adr 0006 managing canonical url context (adr) by @elcoosp
+- Record adr 0007 auditing ecosystem plugin selections (adr) by @elcoosp
+- Record baseline signoff for visual regression suite (qa) by @elcoosp
+- Write performance design architectural docs (explanation) by @elcoosp
+- Document safety metrics and msrv contracts (explanation) by @elcoosp
+- Author rationale document for crate existence (explanation) by @elcoosp
+- Compose error recovery documentation matrix (guides) by @elcoosp
+- Write step-by-step project onboarding sequences (guides) by @elcoosp
+- Describe bit stream offset translation procedures (guides) by @elcoosp
+- Author input buffer lifecycle registration criteria (guides) by @elcoosp
+- Compile layout profile tuning optimization targets (guides) by @elcoosp
+- Outline thread-safe execution feedback mechanisms (guides) by @elcoosp
+- Author bit-packing allocation mechanics guide (guides) by @elcoosp
+- Author index splash documentation landing page (home) by @elcoosp
+- Construct type structure index mappings documentation (reference) by @elcoosp
+- Initialize project change tracking records (reference) by @elcoosp
+- Record runtime failure definition logs (reference) by @elcoosp
 
 ### Miscellaneous
 - Overhaul release workflow with manual publishing and git-cliff by @elcoosp
@@ -59,6 +90,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rm sh file by @elcoosp
 - Rm chore file by @elcoosp
 - Update changelog by @github-actions[bot]
+- Update changelog by @github-actions[bot]
+- Add gitignore rules for documentation project (docs) by @elcoosp
+- Configure project manifest and dependencies (docs) by @elcoosp
+- Lock dependency graph definitions (docs) by @elcoosp
+- Configure workspace package exemptions (docs) by @elcoosp
+- Expose user-agent mapping rules (docs) by @elcoosp
+- More docs by @elcoosp
 
 ### Performance
 - Add misses testing tracks and line-col navigation benchmarks (core) by @elcoosp
@@ -91,6 +129,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cover add_path and by-reference iteration on the raw map (core) by @elcoosp
 - Cover span conversions and const constructors (core) by @elcoosp
 - Register the builder and navigation test modules (core) by @elcoosp
+- Code interactive mobile drawer and pagefind automated specs (docs) by @elcoosp
+- Author matrix screen capture pipeline runner (docs) by @elcoosp
 
 ## [0.1.0] - 2025-12-19
 
