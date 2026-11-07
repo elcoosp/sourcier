@@ -1,0 +1,92 @@
+---
+title: Installation
+description: Add Sourcier to a Rust project from crates.io or Git, verify the MSRV and trim feature flags for a leaner build.
+type: how-to
+---
+
+import { Aside, LinkCard, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Use this guide to add Sourcier to an existing Rust project and to configure
+its feature flags. Sourcier supports Rust 1.99 and later (Edition 2024); the
+MSRV is verified in CI across feature configurations.
+
+## Add the dependency
+
+<Tabs>
+	<TabItem label="cargo add">
+		```bash
+		cargo add sourcier
+		```
+
+		Cargo adds the latest `2.0` release and enables the default features.
+	</TabItem>
+	<TabItem label="Cargo.toml">
+		```toml
+		[dependencies]
+		sourcier = "2.0"
+		```
+	</TabItem>
+</Tabs>
+
+You only ever depend on `sourcier`. It re-exports the full API of the
+`sourcier-core` engine crate, which exists so the implementation can stay
+small and the facade stable.
+
+<Aside type="note">
+	Prefer a living dependency? Track the repository directly:
+
+	```toml
+	[dependencies]
+	sourcier = { git = "https://github.com/elcoosp/sourcier", branch = "main" }
+	```
+</Aside>
+
+## Verify the install
+
+Compile a three-line program that touches the public API:
+
+```rust
+use sourcier::{SourceFilesBuilder, SourceFilesMap};
+
+let files = SourceFilesBuilder::<u8>::new()
+	.add_file("a.rs", b"fn a() {}")
+	.expect("capacity available")
+	.finalize()
+	.expect("no capacity issue");
+
+let _: &str = files.get_path(1).expect("file present");
+```
+
+```bash
+cargo build
+```
+
+A successful build prints nothing. Any `unresolved import` error means the
+dependency did not resolve — check that `Cargo.lock` contains `sourcier`.
+
+## Trim feature flags
+
+All features except `parallel` are enabled by default and forwarded to
+`sourcier-core`. Disable the ones you do not need for a leaner build:
+
+```toml
+[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["view"] }
+```
+
+This keeps the line-offset index and byte extraction while dropping
+serialization and runtime statistics. See
+[Feature flags](/reference/feature-flags/) for the full matrix and what each
+feature gates.
+
+<Aside type="caution">
+	Disabling `view` removes `view`, `view_str`, `position_from_offset`,
+	`offset_from_position` and `display_position`. Code that calls them fails
+	to compile until you re-enable the feature.
+</Aside>
+
+## Next steps
+
+- Follow <LinkCard title="Your first source map" href="/tutorials/getting-started/" /> for the complete workflow.
+- Follow <LinkCard title="Registering source files" href="/guides/registering-files/" /> to put the dependency to work.
+- Check <LinkCard title="Feature flags" href="/reference/feature-flags/" /> before trimming further.
