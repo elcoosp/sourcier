@@ -1,0 +1,144 @@
+---
+title: Registering source files
+description: Register single files, loops, all-or-nothing batches and OS paths; control capacity and resolve duplicate registrations.
+type: how-to
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Use this guide to choose the right registration API for your situation and to
+predict how Sourcier resolves duplicates and capacity. Registration happens
+in the build phase; finalization then sorts entries by path and assigns
+stable one-based ids.
+
+## Register a single file
+
+`add_file` accepts any path that converts to `&str` and any content that
+converts to `Vec<u8>`:
+
+```rust
+use sourcier::SourceFilesMap;
+
+let mut files = SourceFilesMap::<u8>::new();
+files
+	.add_file("src/main.rs", b"fn main() {}")
+	.expect("capacity available");
+```
+
+The only failure is an exhausted id type (`MapError::TooManyFiles`).
+
+## Register in a loop
+
+`add_file` consumes and returns the map or builder for chaining. Inside a
+loop, prefer the mutating variant `add_file_mut`, which keeps the value in
+place after an error:
+
+```rust
+use sourcier::{SourceFilesBuilder, SourceFilesMap};
+
+fn collect(names: &[&str]) -> SourceFilesMap<u16> {
+	let mut builder = SourceFilesBuilder::<u16>::with_capacity(names.len());
+	for name in names {
+		builder
+			.add_file_mut(format!("src/{name}.rs"), format!("// {name}"))
+			.expect("u16 capacity");
+	}
+	builder.finalize().expect("no capacity issue")
+}
+```
+
+`with_capacity` pre-reserves storage for the expected file count and reduces
+reallocations while building.
+
+## Register an all-or-nothing batch
+
+`add_files` registers an iterator of `(path, content)` pairs and leaves the
+map or builder exactly as it was when any pair fails:
+
+```rust
+use sourcier::SourceFilesMap;
+
+let mut files = SourceFilesMap::<u8>::new();
+let batch = vec![
+	("a.rs", &b"fn a() {}"[..]),
+	("b.rs", &b"fn b() {}"[..]),
+];
+
+files.add_files(batch).expect("capacity available");
+files.finalize().expect("no capacity issue");
+assert_eq!(files.len(), 2);
+```
+
+Because the batch is atomic, a failure partway through cannot leave a
+partially registered set behind.
+
+## Register OS paths
+
+Tools that hold `Path`/`PathBuf` values register through `add_path`. Paths
+are stored as `str`, so a path carrying bytes that are not valid UTF-8 fails
+with `MapError::PathNotUtf8`, which carries the lossy rendering of the path
+for diagnostics:
+
+```rust
+use sourcier::{MapError, SourceFilesBuilder};
+use std::path::PathBuf;
+
+let files = SourceFilesBuilder::<u8>::new()
+	.add_path(PathBuf::from("src/main.rs"), b"fn main() {}")
+	.expect("utf-8 path")
+	.finalize()
+	.expect("no capacity issue");
+
+assert_eq!(files.get_id("src/main.rs"), Some(1));
+```
+
+<Aside type="caution">
+	Non-UTF-8 paths cannot be registered losslessly. Convert them at the
+	boundary of your tool and report `MapError::PathNotUtf8` with its `path`
+	field to the user.
+</Aside>
+
+## Handle duplicate paths
+
+You can register the same path any number of times. Duplicates are resolved
+during `finalize`: the first registration of a path wins, later ones are
+dropped, and the resolution holds even at hundreds-of-duplicates scale
+(property-tested):
+
+```rust
+use sourcier::SourceFilesMap;
+
+let mut files = SourceFilesMap::<u8>::new();
+files.add_file("a.rs", b"first").expect("capacity available");
+files.add_file("a.rs", b"second").expect("capacity available");
+files.finalize().expect("no capacity issue");
+
+assert_eq!(files.get_content(1), Some(&b"first"[..]));
+```
+
+## Watch the capacity of the id type
+
+The id type bounds how many files the map can address. Ids are one-based, so
+`0` is never assigned:
+
+| Id type | Max files | File id bits | Choose when |
+| ------- | --------- | ------------ | ----------- |
+| `u8`    | 255       | 8            | Single-crate tools, tests, small codebases |
+| `u16`   | 65,535    | 16           | Language servers, monorepos, indexers |
+
+Call `remaining_capacity` on a builder to learn how many more files the id
+type can address:
+
+```rust
+let mut builder = SourceFilesBuilder::<u8>::new();
+assert_eq!(builder.remaining_capacity(), 255);
+```
+
+Exceeding the limit fails with `MapError::TooManyFiles { max }`, both during
+registration and during finalization.
+
+## Next steps
+
+- Follow <LinkCard title="Working with positions" href="/guides/working-with-positions/" /> to pack spans against the files you registered.
+- Read <LinkCard title="The two-phase lifecycle" href="/explanation/two-phase-lifecycle/" /> to understand why finalization is the phase boundary.
+- Check <LinkCard title="Errors" href="/reference/errors/" /> when a registration call returns an error variant.
