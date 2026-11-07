@@ -1,0 +1,104 @@
+---
+title: Tuning performance
+description: Pre-reserve capacity, choose the right id type, opt into parallel index construction and trim features for faster builds and leaner binaries.
+type: how-to
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Use this guide when maps grow large, when finalization shows up in profiles,
+or when binary size matters. The numbers quoted here come from the bundled
+criterion suite (`cargo bench -p sourcier-core`) on the reference machine
+comparing 2.0 against the 1.0 baseline; treat them as indicative.
+
+## Pre-reserve capacity
+
+Both the map and the builder accept an expected file count, which
+pre-reserves storage and reduces reallocations while building:
+
+```rust
+use sourcier::SourceFilesBuilder;
+
+let builder = SourceFilesBuilder::<u16>::with_capacity(4_096);
+assert_eq!(builder.remaining_capacity(), 65_535);
+```
+
+## Choose the smallest id type that fits
+
+The id type sets both the capacity and the packed encoding:
+
+| Id type | Max files | File id bits | Best for |
+| ------- | --------- | ------------ | -------- |
+| `u8`    | 255       | 8            | Single-crate tools, tests, small codebases |
+| `u16`   | 65,535    | 16           | Language servers, monorepos, indexers |
+
+Smaller id types leave more bits to the other fields of the packed `u64`, and
+`u8` positions are the `CompactAbsolutePosition` alias that many diagnostics
+caches prefer.
+
+## Opt into parallel index construction
+
+Line-offset indexes are built with a single `memchr`-accelerated scan by
+default. The opt-in `parallel` feature spreads that scan across cores with
+`rayon` for huge file sets:
+
+```toml
+[dependencies]
+sourcier = { version = "2.0", features = ["parallel"] }
+```
+
+<Aside type="note">
+	On a 2-core reference VM the thread-pool overhead outweighed the scan
+	savings, which is why the feature is opt-in. Enable it on many-core build
+	machines where file sets are large.
+</Aside>
+
+## Trim features for a leaner build
+
+Default features pull in `serde`, `view` and `rt-feedback`. Disable what your
+tool does not use:
+
+```toml
+[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["view"] }
+```
+
+Each trimmed feature removes code from the binary and work from the build;
+see [Feature flags](/reference/feature-flags/) for what each one gates.
+
+## Know what the costs are
+
+Measured scenarios from the bundled benchmark suite:
+
+| Scenario | 1.0 | 2.0 | Change |
+| -------- | --- | --- | ------ |
+| Finalize 100 files × 50 lines | ~64 us | ~41 us | **-35%** |
+| Finalize 500 files × 100 lines | ~709 us | ~513 us | **-28%** |
+| Finalize phase only, 2,000 × 200 lines | ~3.7 ms | ~2.8 ms | **-25%** |
+| 1,000 multi-line `view` extractions | ~14.4 us | ~4.4 us | **-70%** |
+| Line offsets for 100 files × 1,000 lines | ~0.79 ms | ~0.69 ms | **-12%** |
+| 1,000 offset-to-(line, col) probes | — | ~8.2 us | new |
+| Single-line `view_str` span | — | ~257 ns | new |
+| 2,000 path-to-id lookups (hits) | ~34 us | ~41 us | see note |
+| 2,000 path-to-id lookups (misses) | — | ~33 us | new |
+
+The 2.0 path-to-id index trades a small amount of hit latency (~20%) for
+byte-exact verification, HashDoS-resistant per-map seeding, zero allocations
+at finalization and roughly half the lookup-state memory. Hits and misses
+both terminate on the first empty slot, so misses are as cheap as hits. The
+design rationale lives in [Performance design](/explanation/performance-design/).
+
+## Pin the costs in CI
+
+The benchmark tracks for the builder, the offset bridge and lookups are part
+of the repository, so you can pin the costs your tool depends on:
+
+```bash
+cargo bench -p sourcier-core
+```
+
+## Next steps
+
+- Read <LinkCard title="Performance design" href="/explanation/performance-design/" /> for the data-structure rationale behind the numbers.
+- Follow <LinkCard title="Registering source files" href="/guides/registering-files/" /> for the capacity APIs used above.
+- Check <LinkCard title="Feature flags" href="/reference/feature-flags/" /> before trimming further.
