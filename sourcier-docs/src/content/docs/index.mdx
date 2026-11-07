@@ -1,0 +1,67 @@
+---
+title: Sourcier
+description: Compact and efficient source file mapping and position tracking for Rust — register files once, pack every span into a single u64.
+template: splash
+type: explanation
+hero:
+  tagline: Compact and efficient source file mapping and position tracking for Rust. Register source files once, hand out stable numeric ids, and pack every span — file id, line and column — into a single `u64`.
+  image:
+    file: ../../assets/logo.svg
+    alt: The Sourcier logo — three stacked layers connected by a glowing path
+  actions:
+    - text: Start the tutorial
+      link: /tutorials/getting-started/
+      icon: right-arrow
+    - text: Installation
+      link: /guides/installation/
+      icon: external
+    - text: API reference
+      link: /reference/api/
+      icon: external
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Sourcier is built for diagnostics-heavy tools — compilers, linters, formatters,
+language servers and code editors — that need positions which are cheap to
+build, compare, store and serialize, yet still resolve back to the exact bytes
+of the file they point at. Instead of dragging `String` paths and four `usize`
+fields through every diagnostic, you pack the whole span into one `u64` and
+keep the heavy data in a single immutable registry.
+
+## Choose your path
+
+<CardGrid stagger>
+	<Card title="Learn the golden path">
+		Follow the tutorial to register files, finalize a map, and extract the
+		exact bytes of a span in about ten minutes.
+		<LinkCard title="Your first source map" href="/tutorials/getting-started/" />
+	</Card>
+	<Card title="Solve a specific task">
+		Task-oriented guides cover installation, registration, packed positions,
+		byte views, shared statistics, errors and performance tuning.
+		<LinkCard title="Browse the how-to guides" href="/guides/installation/" />
+	</Card>
+	<Card title="Look something up">
+		Reference pages document the full API surface, the stable `u64` bit
+		layouts, feature flags and every error variant.
+		<LinkCard title="Open the reference" href="/reference/api/" />
+	</Card>
+	<Card title="Understand the design">
+		Explanation pages walk through the two-phase lifecycle, the verified
+		path index and the safety guarantees that shape the API.
+		<LinkCard title="Read the design notes" href="/explanation/why-sourcier/" />
+	</Card>
+</CardGrid>
+
+## Highlights
+
+- **One `u64` per span.** File id, start line, start column, end line and end
+  column are bit-packed together. Positions are `Copy`, cache-friendly, order
+  naturally as integers and survive serialization round trips bit-exactly.
+- **Constant-time lookups.** After finalization, path to id, id to path and id
+  to content are all O(1); line and column navigation is O(log n).
+- **Byte-accurate views.** With the default `view` feature, a position resolves
+  to the exact bytes it covers, including multi-line spans and line terminators.
+- **No unsafe code.** The whole workspace is `#![forbid(unsafe_code)]`, error
+  enums are `#[non_exhaustive]`, and the `FileId` trait is sealed.
