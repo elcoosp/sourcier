@@ -1,0 +1,99 @@
+---
+title: Safety and stability
+description: How Sourcier forbids unsafe code, seals its traits, keeps error enums non_exhaustive, and pins behavior with a layered test suite.
+type: explanation
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Sourcier makes promises that tools can build on: no unsafe code, a stable
+and semver-checked API, and behavior pinned by property, snapshot and
+coverage-verified tests. This page explains each guarantee and how it is
+enforced.
+
+## No unsafe code
+
+The whole workspace carries `#![forbid(unsafe_code)]`. Every guarantee in
+the crate — bit packing, index probing, zero-copy views — is expressed in
+safe Rust. There is no unsafe block to audit, and the compiler rejects any
+introduction of one.
+
+## Sealed traits and non_exhaustive errors
+
+Two type-level decisions keep future releases from breaking your code:
+
+- **The `FileId` trait is sealed.** Its only implementations are `u8` and
+  `u16`, and the sealing module makes downstream implementations
+  impossible. New methods with default implementations can therefore be
+  added to the trait in a minor release without breaking any downstream
+  code.
+- **Error enums are `#[non_exhaustive]`.** `MapError` and `PositionError`
+  can gain variants in minor releases without a semver-breaking change.
+  Match arms outside the crate include a catch-all arm; the compiler
+  enforces this.
+
+## Semver policy
+
+The public API documented on docs.rs is stable and follows semantic
+versioning from 2.0.0 onward. Two specifics worth knowing:
+
+- The packed `u64` layouts are documented so raw values can be persisted;
+  they are stable across semver-compatible releases. See
+  [Position encoding](/reference/position-encoding/).
+- The 2.0 wire format dropped the redundant `path_to_id` table, and 1.0
+  payloads that still carry the field deserialize without error — forward
+  compatibility is explicit and tested.
+
+## The layered test suite
+
+The repository ships unit, integration, property-based, snapshot and doc
+tests:
+
+| Layer | Tool | Pins |
+| ----- | ---- | ---- |
+| Unit and integration | `cargo test` / `cargo nextest run` | Per-module behavior, builder and navigation flows |
+| Property-based | `proptest` | Position encoding round trips, line/col to offset inverse mapping, map lookup consistency, first-registration-wins duplicate resolution at hundreds-of-files scale |
+| Snapshot | `insta` | YAML snapshots of map serialization, view extraction, packed positions and error messages |
+| Doc tests | `cargo test` | Every code example in the rustdoc compiles and runs |
+
+The property suite also covers adversarial deserialized maps that exceed the
+id capacity, and the 4 GiB line-offset limit is exercised end to end with
+lazily committed allocations, so oversized-file paths are tested for real.
+
+Snapshot files live in `sourcier-core/src/tests/snapshots/` and are
+committed; regenerate them after an intentional change with
+`INSTA_UPDATE=always cargo test`.
+
+## Coverage and static checks
+
+CI runs the full gate:
+
+```bash
+cargo test --workspace --all-features      # unit, integration, property, doc tests
+cargo nextest run --workspace --all-features
+cargo llvm-cov --workspace --all-features --summary-only
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo fmt --all -- --check
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
+cargo deny check                           # licenses, advisories, bans, sources
+```
+
+Coverage measured with `cargo-llvm-cov` reports 100% of functions covered;
+`llvm-cov show` confirms every line and every reachable region executes. The
+summary table reports 99.9% for lines and regions — the residual counts are
+uncallable compiler artifacts (definition-site copies of generic code), not
+missing tests.
+
+`missing_docs` is denied workspace-wide, so every public item carries
+documentation, and rustdoc builds with warnings denied.
+
+## The MSRV contract
+
+The minimum supported Rust version is 1.99, verified in CI with `cargo
+check` across feature configurations. The crate uses Edition 2024.
+
+## Next steps
+
+- Read <LinkCard title="The two-phase lifecycle" href="/explanation/two-phase-lifecycle/" /> for the invariants the tests pin.
+- Check <LinkCard title="Errors" href="/reference/errors/" /> for the variants the `non_exhaustive` policy applies to.
+- Browse the [repository](https://github.com/elcoosp/sourcier) for the CI workflows and `deny.toml`.
