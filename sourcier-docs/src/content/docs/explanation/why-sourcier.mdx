@@ -1,0 +1,86 @@
+---
+title: Why Sourcier exists
+description: The problem of cheap diagnostics positions in compilers, linters and language servers, and the design Sourcier chose for it.
+type: explanation
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Tools that report diagnostics — compilers, linters, formatters, language
+servers and code editors — handle positions constantly. Every warning, error,
+highlight, jump target and rename needs to say where it points. The obvious
+representation, a `String` path plus a handful of `usize` fields per
+diagnostic, is expensive in every dimension that matters at scale.
+
+## The cost of the obvious representation
+
+A diagnostic position that stores its file path as a `String` pays repeatedly
+for that choice:
+
+- **Memory.** A path is stored, cloned or re-allocated for every position
+  that carries it. A codebase with a million diagnostics stores the same
+  paths a million times, directly or behind reference counters.
+- **Comparison and ordering.** Sorting diagnostics by location means
+  comparing strings before comparing numbers. String comparison is slower
+  than integer comparison and harder to make cache-friendly.
+- **Serialization.** Every position serializes its path again. Wire payloads
+  and caches bloat, and round trips can silently change path formatting.
+- **Locality.** A position spread over five or more fields is not one value:
+  it is five values that must travel, hash, compare and persist together.
+
+Positions also need to resolve back to the exact bytes they cover — for
+quick fixes, for snippets in reports, for hover content. That resolution
+needs the file content, which compounds the problem: content lookups should
+be as cheap as the positions themselves.
+
+## The Sourcier answer
+
+Sourcier splits the problem in two and gives each half the cheapest possible
+representation:
+
+1. **A single immutable registry holds the heavy data.** Files are registered
+   once, deduplicated and sorted during finalization, and the map then
+   answers path, id and content lookups in constant time. Heavy data exists
+   exactly once, no matter how many positions point at it.
+2. **A position is one `u64`.** File id, start line, start column, end line
+   and end column are bit-packed into a single machine word. Positions are
+   `Copy`, compare as integers, hash as integers, serialize as integers and
+   order lexicographically by construction.
+
+A million diagnostics therefore carry a million machine words plus one
+registry — not a million copies of paths and field tuples.
+
+<Aside type="note">
+	The packed layout is documented and stable, so raw `u64` values can be
+	persisted and reloaded. See
+	[Position encoding](/reference/position-encoding/) for the bit tables.
+</Aside>
+
+## What Sourcier is not
+
+Sourcier is not a source-map implementation for transpiled code: it does not
+map between source and generated files, and it does not encode token names or
+mappings segments. It tracks positions in the files a tool actually reads.
+If your tool parses source files and reports locations inside them, Sourcier
+is designed for you.
+
+## Design values
+
+The API follows from four commitments:
+
+- **Cheap by default.** Positions pack with no validation cost; validation is
+  an opt-in `try_new` away. Finalization performs no per-path heap
+  allocation for typical source trees.
+- **Correct under pressure.** The path index verifies every probe against
+  the stored bytes, so adversarial keys cannot precompute collisions, and
+  duplicate registrations resolve deterministically.
+- **Typed at the boundaries.** The `FileId` trait is sealed, error enums are
+  `#[non_exhaustive]`, and the whole workspace forbids unsafe code.
+- **Bytes when you need them.** The `view` feature keeps a compact line
+  index per file, so any position resolves to the exact bytes it covers.
+
+## Next steps
+
+- Read <LinkCard title="The two-phase lifecycle" href="/explanation/two-phase-lifecycle/" /> for the build-finalize-lookup split that makes the registry immutable.
+- Read <LinkCard title="Performance design" href="/explanation/performance-design/" /> for the data structures behind the constants.
+- Follow <LinkCard title="Your first source map" href="/tutorials/getting-started/" /> to see the design in ten minutes of code.
