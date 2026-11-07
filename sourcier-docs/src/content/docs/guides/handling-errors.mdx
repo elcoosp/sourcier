@@ -1,0 +1,119 @@
+---
+title: Handling errors
+description: Distinguish every MapError and PositionError variant, match them exhaustively despite non_exhaustive, and recover with the right fallback.
+type: how-to
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Use this guide to handle the two error enums Sourcier returns:
+`MapError` for building or querying a map, and `PositionError` for checked
+position constructors. Both enums are `#[non_exhaustive]`, so match arms
+outside the crate always include a catch-all arm.
+
+## Match MapError variants
+
+`MapError` has five variants. This example recovers from each one
+appropriately:
+
+```rust
+use sourcier::{MapError, SourceFilesBuilder};
+
+fn register(builder: &mut SourceFilesBuilder<u8>, path: &str, data: &[u8]) {
+	if let Err(err) = builder.add_file_mut(path, data) {
+		match err {
+			MapError::TooManyFiles { max } => {
+				eprintln!("id type exhausted: at most {max} files");
+				// Recover: switch to u16 ids, or stop accepting files.
+			}
+			MapError::FileTooLarge { size } => {
+				eprintln!("file of {size} bytes exceeds the 4 GiB line-offset limit");
+				// Recover: skip the file; views resolve to None for it.
+			}
+			MapError::PathNotUtf8 { path } => {
+				eprintln!("skipping non-UTF-8 path: {path}");
+				// Recover: skip; the path carries U+FFFD replacements.
+			}
+			// The map cannot be modified after finalization; with the
+			// type-state builder these two variants are unrepresentable,
+			// but the raw map can still report them.
+			MapError::Finalized | MapError::AlreadyFinalized => {
+				unreachable!("builder guarantees the build phase")
+			}
+			// non_exhaustive: always keep a catch-all arm.
+			other => {
+				eprintln!("unexpected map error: {other}");
+			}
+		}
+	}
+}
+```
+
+The variants and when they occur:
+
+| Variant | Fields | Occurs when |
+| ------- | ------ | ----------- |
+| `TooManyFiles` | `max: usize` | Registration or finalization exceeds the id type capacity (255 for `u8`, 65,535 for `u16`) |
+| `AlreadyFinalized` | — | `finalize` is called on an already finalized map |
+| `Finalized` | — | The finalized map is mutated (`add_file`, `add_files`, `add_path`) |
+| `FileTooLarge` | `size: u64` | A file exceeds the 4 GiB `u32` line-offset limit |
+| `PathNotUtf8` | `path: String` | `add_path` receives a path that is not valid UTF-8 |
+
+<Aside type="tip">
+	`SourceFilesBuilder` exposes only the registration API and `finalize`
+	consumes it, so `MapError::Finalized` and `MapError::AlreadyFinalized`
+	cannot be produced through the builder. They remain reachable through the
+	raw `SourceFilesMap`, which keeps its phase errors at runtime.
+</Aside>
+
+## Handle checked position failures
+
+`PositionError` has a single variant, `InvalidRange`, which carries the
+rejected span:
+
+```rust
+use sourcier::{AbsolutePosition, PositionError};
+
+match AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1) {
+	Ok(pos) => println!("packed as {}", pos.as_raw()),
+	Err(PositionError::InvalidRange { start_line, start_col, end_line, end_col }) => {
+		eprintln!(
+			"invalid span {start_line}:{start_col}-{end_line}:{end_col}"
+		);
+	}
+	Err(_) => unreachable!("only one variant exists today"),
+}
+```
+
+A valid span satisfies all of the following:
+
+- `start_line >= 1` and `end_line >= 1`
+- `start_col >= 1` and `end_col >= 1`
+- `start_line < end_line`, or `start_line == end_line && start_col <= end_col`
+
+## Read the display strings
+
+Both enums implement `std::error::Error` through `thiserror`, and their
+display strings are part of the API surface and covered by snapshot tests:
+
+```text
+cannot register more than 255 files for this file id type
+the source files map has already been finalized
+cannot modify the source files map after finalization
+file content of 4294967296 bytes exceeds the 4 GiB line offset limit
+path is not valid UTF-8: caf<U+FFFD>.txt
+invalid position range: start 2:1 must not come after end 1:1 and all lines and columns must be at least 1
+```
+
+## Plan for capacity up front
+
+`MapError::TooManyFiles` is the variant most tools meet first. Choose the id
+type before registration starts: `u8` addresses 255 files, `u16` addresses
+65,535. Check `remaining_capacity` on a builder to fail early with your own
+message instead of surfacing the library error.
+
+## Next steps
+
+- Follow <LinkCard title="Registering source files" href="/guides/registering-files/" /> to avoid capacity errors in the first place.
+- Check the <LinkCard title="Errors reference" href="/reference/errors/" /> for the complete variant list with field tables.
+- Read <LinkCard title="Safety and stability" href="/explanation/safety-and-stability/" /> to see how `non_exhaustive` interacts with the semver policy.
