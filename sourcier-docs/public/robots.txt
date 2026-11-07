@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+# llms.txt and llms-full.txt are generated at the site root after each build.
