@@ -1,0 +1,191 @@
+---
+title: API surface
+description: Complete reference for every public type, trait and function Sourcier exports, with signatures, parameters and return values.
+type: reference
+---
+
+import { Aside, Badge, LinkCard } from '@astrojs/starlight/components';
+
+Sourcier is a facade crate: `sourcier` re-exports the full API of
+`sourcier-core`, so `sourcier::...` is the only path you ever need. This page
+lists every public item with its signature. The rustdoc-generated reference
+lives on [docs.rs/sourcier](https://docs.rs/sourcier).
+
+## Registry types
+
+### `SourceFilesMap<Id: FileId>`
+
+Two-phase registry: register files, finalize, then query immutably.
+
+| Method | Signature | Returns | Description |
+| ------ | --------- | ------- | ----------- |
+| `new` | `pub fn new() -> Self` | `Self` | Empty map without pre-reserved storage |
+| `with_capacity` | `pub fn with_capacity(expected_files: usize) -> Self` | `Self` | Empty map that pre-reserves storage |
+| `with_feedback` <Badge text="rt-feedback" size="small" /> | `pub fn with_feedback(feedback: Arc<RuntimeFeedback>) -> Self` | `Self` | Map that reports finalization statistics |
+| `add_file` | `pub fn add_file(&mut self, path: impl AsRef<str>, content: impl Into<Vec<u8>>) -> Result<(), MapError>` | `Result<(), MapError>` | Registers one file |
+| `add_files` | `pub fn add_files<I, P, C>(&mut self, files: I) -> Result<(), MapError> where I: IntoIterator<Item = (P, C)>` | `Result<(), MapError>` | All-or-nothing batch registration |
+| `add_path` | `pub fn add_path(&mut self, path: impl AsRef<Path>, content: impl Into<Vec<u8>>) -> Result<(), MapError>` | `Result<(), MapError>` | Registers an OS path; fails with `PathNotUtf8` on non-UTF-8 paths |
+| `finalize` | `pub fn finalize(&mut self) -> Result<(), MapError>` | `Result<(), MapError>` | Sorts by path, deduplicates, assigns one-based ids |
+| `is_finalized` | `pub fn is_finalized(&self) -> bool` | `bool` | Phase query |
+| `len` / `is_empty` | `pub fn len(&self) -> usize` / `pub fn is_empty(&self) -> bool` | — | Entry count |
+| `total_bytes` | `pub fn total_bytes(&self) -> usize` | `usize` | Total registered content bytes |
+| `paths` | `pub fn paths(&self) -> impl Iterator<Item = &str>` | iterator | Registered paths |
+| `iter` | `pub fn iter(&self) -> Iter<'_, Id>` | `Iter<'_, Id>` | Files with ids; yields nothing before finalization |
+| `get_id` | `pub fn get_id(&self, path: &str) -> Option<Id>` | `Option<Id>` | Path to id, O(1) after finalization |
+| `get_path` | `pub fn get_path(&self, id: Id) -> Option<&str>` | `Option<&str>` | Id to path, O(1) |
+| `get_content` | `pub fn get_content(&self, id: Id) -> Option<&[u8]>` | `Option<&[u8]>` | Id to content bytes, O(1) |
+| `get` | `pub fn get(&self, id: Id) -> Option<FileRef<'_, Id>>` | `Option<FileRef<'_, Id>>` | Id to a borrowed `FileRef { id, path, content }` |
+| `view` <Badge text="view" size="small" /> | `pub fn view(&self, id: Id, pos: &impl SourceFilePosition) -> Option<&[u8]>` | `Option<&[u8]>` | Exact bytes the position covers |
+| `view_str` <Badge text="view" size="small" /> | `pub fn view_str(&self, id: Id, pos: &impl SourceFilePosition) -> Option<&str>` | `Option<&str>` | UTF-8 view; `None` on non-UTF-8 boundaries |
+| `line_offsets` <Badge text="view" size="small" /> | `pub fn line_offsets(&self, id: Id) -> Option<&LineOffsets>` | `Option<&LineOffsets>` | Per-file line index |
+| `position_from_offset` <Badge text="view" size="small" /> | `pub fn position_from_offset(&self, id: Id, offset: usize) -> Option<AbsolutePosition<Id>>` | `Option<AbsolutePosition<Id>>` | Byte offset to point position, O(log n) |
+| `offset_from_position` <Badge text="view" size="small" /> | `pub fn offset_from_position(&self, id: Id, pos: &impl SourceFilePosition) -> Option<usize>` | `Option<usize>` | Span start to byte offset, O(log n) |
+| `display_position` | `pub fn display_position(&self, id: Id, pos: &impl SourceFilePosition) -> Option<PositionDisplay<'_>>` | `Option<PositionDisplay<'_>>` | Zero-allocation `path:line:column` renderer |
+
+`&SourceFilesMap` implements `IntoIterator`, yielding `FileRef` entries in id
+order; use it like `for entry in &files { ... }`.
+
+### `SourceFilesBuilder<Id: FileId>`
+
+Type-state build-phase companion of `SourceFilesMap`. It only exposes
+registration, so `MapError::Finalized` and `MapError::AlreadyFinalized` are
+unrepresentable, and `finalize` consumes the builder and hands back the
+lookup-ready map.
+
+| Method | Signature | Returns | Description |
+| ------ | --------- | ------- | ----------- |
+| `new` | `pub fn new() -> Self` | `Self` | Empty builder |
+| `with_capacity` | `pub fn with_capacity(expected_files: usize) -> Self` | `Self` | Builder that pre-reserves storage |
+| `with_feedback` <Badge text="rt-feedback" size="small" /> | `pub fn with_feedback(feedback: Arc<RuntimeFeedback>) -> Self` | `Self` | Builder that reports finalization statistics |
+| `add_file` | `pub fn add_file(self, path: impl AsRef<str>, content: impl Into<Vec<u8>>) -> Result<Self, MapError>` | `Result<Self, MapError>` | Chainable registration |
+| `add_file_mut` | `pub fn add_file_mut(&mut self, path: impl AsRef<str>, content: impl Into<Vec<u8>>) -> Result<(), MapError>` | `Result<(), MapError>` | Registration for loops |
+| `add_files` | `pub fn add_files<I, P, C>(&mut self, files: I) -> Result<(), MapError>` | `Result<(), MapError>` | All-or-nothing batch |
+| `add_path` | `pub fn add_path(&mut self, path: impl AsRef<Path>, content: impl Into<Vec<u8>>) -> Result<(), MapError>` | `Result<(), MapError>` | OS-path registration |
+| `len` / `is_empty` | `pub fn len(&self) -> usize` / `pub fn is_empty(&self) -> bool` | — | Files registered so far |
+| `paths` | `pub fn paths(&self) -> impl Iterator<Item = &str>` | iterator | Registered paths, in registration order |
+| `finalize` | `pub fn finalize(self) -> Result<SourceFilesMap<Id>, MapError>` | `Result<SourceFilesMap<Id>, MapError>` | Consumes the builder, returns the map |
+| `remaining_capacity` | `pub fn remaining_capacity(&self) -> usize` | `usize` | How many more files the id type can address |
+
+## Position types
+
+### `AbsolutePosition<Id: FileId>`
+
+A span inside a specific source file, packed into a single `u64`. Aliases:
+`CompactAbsolutePosition = AbsolutePosition<u8>`,
+`StandardAbsolutePosition = AbsolutePosition<u16>`.
+
+| Item | Signature | Description |
+| ---- | --------- | ----------- |
+| `new` | `pub fn new(file_id: Id, start_line: u16, start_col: u8, end_line: u16, end_col: u8) -> Self` | Infallible, zero-cost packing; no validation |
+| `try_new` | `pub fn try_new(...) -> Result<Self, PositionError>` | Same packing with range validation |
+| `from_raw` | `pub fn from_raw(raw: u64) -> Option<Self>` | Rebuilds from the raw encoding; `None` for unrepresentable ids (including `0`) |
+| `as_raw` | `pub const fn as_raw(&self) -> u64` | Stable raw encoding |
+| `to_relative` | `pub fn to_relative(self) -> RelativePosition` | Strips the file id |
+| `file_id` | `pub fn file_id(&self) -> Id` | File id component |
+| `Display` | `"{start_line}:{start_col}-{end_line}:{end_col}"` | `"2:5-2:22"` |
+| Derives | `Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash` + `serde` with the default feature | Ordering matches lexicographic span order |
+
+### `RelativePosition`
+
+A file-agnostic span packed into the low 48 bits of a `u64`; the high 16 bits
+are always zero.
+
+| Item | Signature | Description |
+| ---- | --------- | ----------- |
+| `new` | `pub const fn new(start_line: u16, start_col: u8, end_line: u16, end_col: u8) -> Self` | Const packing for `const`/`static` items |
+| `try_new` | `pub fn try_new(...) -> Result<Self, PositionError>` | Validated packing |
+| `from_raw` | `pub const fn from_raw(raw: u64) -> Self` | Const rebuild; masks the high 16 bits |
+| `as_raw` | `pub const fn as_raw(&self) -> u64` | Raw encoding |
+| `to_absolute` | `pub fn to_absolute<Id: FileId>(self, file_id: Id) -> AbsolutePosition<Id>` | Attaches a file id |
+| `Display` | `"{start_line}:{start_col}-{end_line}:{end_col}"` | `"2:5-3:10"` |
+
+### `SourceFilePosition` (trait)
+
+Uniform accessor trait over both position kinds, implemented by
+`AbsolutePosition<Id>` and `RelativePosition`. Write generic helpers against
+it:
+
+| Method | Signature | Returns |
+| ------ | --------- | ------- |
+| `source_file_id` | `fn source_file_id(&self) -> Option<u16>` | `None` for relative positions |
+| `start_line` | `fn start_line(&self) -> u16` | One-based start line |
+| `start_column` | `fn start_column(&self) -> u8` | One-based start column |
+| `end_line` | `fn end_line(&self) -> u16` | One-based end line |
+| `end_column` | `fn end_column(&self) -> u8` | One-based end column |
+
+## Id type
+
+### `FileId` (sealed trait)
+
+Implemented only by `u8` and `u16`; sealed, so new methods can be added
+without breaking downstream code. Associated constants: `MAX_FILES`,
+`FILE_ID_BITS`, `FILE_ID_SHIFT`, `START_LINE_SHIFT`, `START_COL_SHIFT`,
+`END_LINE_SHIFT`, `END_COL_SHIFT`, `FILE_ID_MASK`, `LINE_MASK`, `COL_MASK`.
+
+| Method | Signature | Description |
+| ------ | --------- | ----------- |
+| `from_index` | `fn from_index(index: usize) -> Option<Self>` | `index 0 -> id 1`; `None` out of range |
+| `to_raw` | `fn to_raw(self) -> u64` | Raw numeric value |
+
+## View feature types
+
+### `LineOffsets`
+
+Compact per-line byte offset index, 4 bytes per line, files up to 4 GiB.
+
+| Method | Signature | Description |
+| ------ | --------- | ----------- |
+| `compute` | `pub fn compute(content: &[u8]) -> Result<Self, MapError>` | Builds the index with a single `memchr` scan; `FileTooLarge` beyond 4 GiB |
+| `line_count` | `pub fn line_count(&self) -> usize` | Number of lines |
+| `content_length` | `pub fn content_length(&self) -> usize` | Total byte length |
+| `line_starts` | `pub fn line_starts(&self) -> &[u32]` | The raw `u32` offset list |
+| `line_range` | `pub fn line_range(&self, line: usize) -> Option<Range<usize>>` | One-based line to byte range; line `0` resolves to `None` |
+| `line_col_from_offset` | `pub fn line_col_from_offset(&self, offset: usize) -> Option<(usize, usize)>` | Offset to one-based `(line, column)` |
+| `offset_from_line_col` | `pub fn offset_from_line_col(&self, line: usize, col: usize) -> Option<usize>` | Inverse mapping |
+
+## Runtime statistics types
+
+### `RuntimeFeedback` :badge[rt-feedback]
+
+Lock-free usage statistics shared between maps via `Arc`.
+
+| Method | Signature | Description |
+| ------ | --------- | ----------- |
+| `new` | `pub fn new() -> Self` | Empty context |
+| `snapshot` | `pub fn snapshot(&self) -> FeedbackSnapshot` | Immutable counter snapshot |
+
+### `FeedbackSnapshot` :badge[rt-feedback]
+
+`Copy` snapshot with public fields `total_files: usize`, `total_bytes: u64`,
+`max_file_size: usize`, `usage_count: u64`. Totals describe the most recent
+finalization; `usage_count` accumulates.
+
+### `PositionDisplay<'a>`
+
+Zero-allocation `path:line:column` renderer created by
+`display_position`. Implements `Display`; the string is formatted lazily from
+borrowed data.
+
+## Iterator types
+
+`Iter<'a, Id>` — created by `iter` and by `&SourceFilesMap`'s
+`IntoIterator`. Yields `FileRef<'a, Id> { id: Id, path: &'a str, content:
+&'a [u8] }` and yields nothing before finalization, because ids only exist
+afterwards.
+
+## Error types
+
+`MapError` and `PositionError` are `#[non_exhaustive]` enums; see
+[Errors](/reference/errors/) for every variant with its fields.
+
+<Aside type="note">
+        Signatures are abbreviated on this page: trait bounds such as
+        `Id: FileId` are implied, and long parameter lists are elided with `...`
+        only where the reference table above lists them in full.
+</Aside>
+
+## Next steps
+
+- Check <LinkCard title="Position encoding" href="/reference/position-encoding/" /> for the bit layouts behind `as_raw`.
+- Check <LinkCard title="Feature flags" href="/reference/feature-flags/" /> for what each badge on this page means.
+- Browse [docs.rs/sourcier](https://docs.rs/sourcier) for the rustdoc-generated API.
