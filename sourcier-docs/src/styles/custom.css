@@ -1,0 +1,56 @@
+/*
+ * Sourcier brand accent — derived from the project logo.
+ *
+ * The logo pairs a deep indigo body (hsl(228 43% 40%)) with a glowing
+ * spring-green path (hsl(161 54% 55%)). Starlight's default accent is
+ * blue/indigo, so the green glow is used as the accent color to stay
+ * distinctive, with values tuned for WCAG AA contrast in both themes:
+ *
+ *   light mode  accent-high #045240 on white  = 9.19:1 (AAA)
+ *               accent       #1E8066 on white = 4.84:1 (UI)
+ *   dark mode   accent-high #5FDDAF on #131619 = 10.76:1 (AAA)
+ *               accent       #30A681 on #131619 = 5.96:1 (UI)
+ */
+
+:root {
+        --sl-color-accent-low: #dff6ef;
+        --sl-color-accent: #1e8066;
+        --sl-color-accent-high: #045240;
+}
+
+[data-theme="dark"] {
+        --sl-color-accent-low: #10372d;
+        --sl-color-accent: #30a681;
+        --sl-color-accent-high: #5fddaf;
+}
+
+/* Wide reference tables (API signatures) scroll inside the content column
+ * instead of overflowing the page on narrow viewports. */
+.sl-markdown-content table {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+}
+
+/* Long Rust signatures inside table cells wrap at any character. */
+.sl-markdown-content td code,
+.sl-markdown-content th code {
+        overflow-wrap: anywhere;
+}
+
+/* On narrow viewports the heading anchor's reserved padding-right can push
+ * inline headings (Starlight renders them inline beside the anchor) past
+ * the viewport when a long code word is followed by a badge. Drop the
+ * reservation on small screens; the anchor icon only reveals on hover or
+ * keyboard focus. */
+@media (max-width: 640px) {
+        .sl-heading-wrapper :is(h2, h3, h4, h5, h6) {
+                padding-right: 0;
+        }
+}
+
+/* Keep the logo crisp in the header at its natural vector size. */
+main .hero img,
+main img {
+        image-rendering: auto;
+}

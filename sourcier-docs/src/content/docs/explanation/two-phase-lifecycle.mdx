@@ -1,0 +1,93 @@
+---
+title: The two-phase lifecycle
+description: Why SourceFilesMap splits into a mutable build phase and an immutable lookup phase, and how the type-state builder enforces the boundary.
+type: explanation
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Every `SourceFilesMap` lives through two phases: a mutable **build phase** in
+which files are registered, and an immutable **lookup phase** in which ids
+exist and queries run in constant time. The phase boundary is the
+`finalize` call, and it is what allows both phases to be fast.
+
+## The build phase
+
+During the build phase the map is an append-only registry. `add_file`,
+`add_files` and `add_path` append entries — path, content and registration
+order — without doing any sorting, hashing or index construction. Nothing
+about ids exists yet: ids are an output of finalization, not an input.
+
+This keeps registration as cheap as possible. A tool that discovers files
+while walking a directory tree, or that ingests files from a language-server
+client, pays only the cost of storing each entry.
+
+## What finalization does
+
+`finalize` performs three steps in one pass structure:
+
+1. **Sort.** Entries are sorted by path with a single unstable sort. Ties —
+   entries that registered the same path — keep registration order.
+2. **Deduplicate.** For duplicate paths, the first registration wins and
+   later ones are dropped. The rule holds deterministically even at
+   hundreds-of-duplicates scale, which property tests pin.
+3. **Assign ids.** Files receive one-based ids in sorted path order, so the
+   same set of files always produces the same ids.
+
+Finalization is zero-allocation for typical source trees: paths up to 30
+bytes live inline inside their entries, file contents are never copied, and
+the lookup index is built over the already-stored paths. After the call the
+map is immutable.
+
+## The lookup phase
+
+Immutability is the performance trick. Because the entry set cannot change
+after finalization, the path index can be a verified open-addressed hash
+table sized once, with no tombstones, no rehashing and no mutation
+synchronization. `get_id`, `get_path`, `get_content` and `get` run in
+constant time; line and column navigation runs in O(log n) over the per-file
+line index.
+
+Iterating a map before finalization yields nothing: `Iter` filters on the
+phase flag because ids only exist afterwards.
+
+<Aside type="note">
+	Serialized payloads carry only the raw entries and the phase flag. The
+	lookup state is rebuilt on load, so a deserialized map behaves exactly
+	like a finalized one.
+</Aside>
+
+## Why the builder exists
+
+The raw map tracks its phase at runtime and reports mistakes as errors:
+`MapError::Finalized` when you mutate after finalization,
+`MapError::AlreadyFinalized` when you finalize twice. Those errors are part
+of the API for tools that must keep a map through both phases.
+
+`SourceFilesBuilder` removes the mistakes at the type level. It wraps a
+build-phase map and exposes only the registration API, so mutation after
+finalization cannot be expressed, and its `finalize` consumes the builder
+and returns a map that is already in its lookup phase:
+
+```rust
+use sourcier::SourceFilesBuilder;
+
+let files = SourceFilesBuilder::<u8>::new()
+	.add_file("src/main.rs", b"fn main() {}")
+	.expect("capacity available")
+	.add_file("src/lib.rs", b"pub mod utils;")
+	.expect("capacity available")
+	.finalize()
+	.expect("no capacity issue");
+```
+
+The phase errors are unrepresentable through the builder; the compiler
+enforces the lifecycle. Choose the builder when the lifecycle is linear —
+register, finalize, then query — and the raw map when a tool legitimately
+moves a single map between phases.
+
+## Next steps
+
+- Follow <LinkCard title="Registering source files" href="/guides/registering-files/" /> for the registration recipes the build phase offers.
+- Read <LinkCard title="Performance design" href="/explanation/performance-design/" /> for the verified index that finalization builds.
+- Check the <LinkCard title="API surface" href="/reference/api/" /> for the exact signatures of both phases.

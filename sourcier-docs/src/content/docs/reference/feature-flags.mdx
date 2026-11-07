@@ -1,0 +1,75 @@
+---
+title: Feature flags
+description: What the serde, view, rt-feedback and parallel Cargo features gate, their defaults and how to trim them.
+type: reference
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+All features are enabled by default and forwarded to the `sourcier-core`
+engine crate. You only configure features on the `sourcier` facade.
+
+| Feature | Default | Gates |
+| ------- | ------- | ----- |
+| `serde` | yes | `Serialize`/`Deserialize` for maps, positions and `FeedbackSnapshot`; wire-format loading |
+| `view` | yes | `LineOffsets`, `view`, `view_str`, `line_offsets`, `position_from_offset`, `offset_from_position`, `display_position` |
+| `rt-feedback` | yes | `RuntimeFeedback`, `FeedbackSnapshot`, `with_feedback` on map and builder |
+| `parallel` | no | Multi-threaded line-offset index construction with `rayon` |
+
+## What each feature means for your build
+
+`serde` adds the serialization derives and the payload-compatibility logic.
+Tools that keep positions only in memory can drop it.
+
+`view` adds the per-file line index (a single `memchr`-accelerated scan, 4
+bytes per line) and every byte-extraction and offset-bridge API. Diagnostics
+tools almost always keep it; pure id registries can drop it.
+
+`rt-feedback` adds atomic counters behind `Arc<RuntimeFeedback>`. No locks
+are taken on the reporting path; the cost when unused is the unused code
+path.
+
+`parallel` is opt-in because on a 2-core reference VM the thread-pool
+overhead outweighed the scan savings. Enable it on many-core build machines
+processing large file sets; it adds the `rayon` dependency.
+
+## Trimming recipes
+
+Keep only byte extraction:
+
+```toml
+[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["view"] }
+```
+
+Keep serialization but no views and no statistics:
+
+```toml
+[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["serde"] }
+```
+
+Enable everything including parallelism:
+
+```toml
+[dependencies]
+sourcier = { version = "2.0", features = ["parallel"] }
+```
+
+<Aside type="caution">
+	Disabling a feature removes its APIs from the compiled crate: code that
+	calls `view` with `default-features = false` fails to compile. Cargo
+	unifies features across your dependency graph, so another crate in the
+	tree can re-enable a feature you trimmed.
+</Aside>
+
+## MSRV per configuration
+
+The minimum supported Rust version is 1.99 for every feature configuration;
+CI verifies `cargo check` across feature combinations.
+
+## Next steps
+
+- Follow <LinkCard title="Installation" href="/guides/installation/" /> for the install commands behind these snippets.
+- Follow <LinkCard title="Tuning performance" href="/guides/tuning-performance/" /> when deciding between `parallel` and the default scan.
+- Check the <LinkCard title="API surface" href="/reference/api/" /> for the items each feature gates.

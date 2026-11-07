@@ -1,0 +1,98 @@
+---
+title: Position encoding
+description: Stable u64 bit layouts for AbsolutePosition and RelativePosition, the reserved zero encoding, and wire-format compatibility rules.
+type: reference
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Positions are stable `u64` encodings. The layout is documented so raw values
+can be persisted safely: the layout is part of the public API and stable
+across semver-compatible releases. All fields are packed most significant
+first, and the end line and end column are inclusive.
+
+## Absolute layout
+
+`AbsolutePosition<Id>` packs five fields. The file id always occupies the
+most significant bits, and the remaining fields are laid out so no bits are
+wasted:
+
+| Id type | File id | Start line | Start col | End line | End col |
+| ------- | -------- | ---------- | --------- | -------- | ------- |
+| `u8`    | `56..64` | `40..56`   | `32..40`  | `16..32` | `0..8`  |
+| `u16`   | `48..64` | `32..48`   | `24..32`  | `8..24`  | `0..8`  |
+
+Field widths follow from the ranges: lines are `u16` (16 bits), columns are
+`u8` (8 bits), and the id field is 8 bits for `u8` and 16 bits for `u16`.
+
+Because the fields are ordered from most to least significant, comparing the
+packed values as integers is equivalent to ordering spans lexicographically:
+file id first, then start line, start column, end line, end column.
+
+## Relative layout
+
+`RelativePosition` stores no file id and packs into the low 48 bits:
+
+| Field | Bits |
+| ----- | ---- |
+| Start line | `32..48` |
+| Start col | `24..32` |
+| End line | `8..24` |
+| End col | `0..8` |
+
+The high 16 bits are always zero. `RelativePosition::from_raw` masks them
+away, so values with garbage in the high bits still round-trip losslessly.
+
+## Reserved encodings
+
+Ids are one-based: the first file in a map receives id `1`, and `0` is never
+assigned. This keeps the all-zero encoding reserved for future use as a
+sentinel:
+
+- `AbsolutePosition::from_raw` returns `None` when the embedded file id is
+  `0`, for both id types.
+- `RelativePosition::from_raw` masks the high bits and accepts the all-zero
+  value; use `try_new` if you need range validation on rebuild.
+
+## Limits
+
+| Field | Width | Limit | Exceeding it |
+| ----- | ----- | ----- | ------------ |
+| Files per map (`u8` ids) | 8 bits | 255 files | `MapError::TooManyFiles { max: 255 }` |
+| Files per map (`u16` ids) | 16 bits | 65,535 files | `MapError::TooManyFiles { max: 65535 }` |
+| Line numbers | 16 bits | 65,535 lines | Offset conversion returns `None` |
+| Columns | 8 bits | 255 byte columns | Offset conversion returns `None` |
+| File size for line indexes | 32-bit offsets | 4 GiB | `MapError::FileTooLarge { size }` |
+
+Columns are byte columns, not character columns: a multi-byte UTF-8 character
+counts one column per byte.
+
+## Wire format
+
+With the `serde` feature, `SourceFilesMap` serializes to a payload that
+carries only the raw entries and the phase flag; the lookup state is derived
+from the sorted entries and rebuilt on load. This keeps payloads compact —
+roughly half the 1.0 lookup-state memory.
+
+Backward compatibility:
+
+- 2.0 payloads rebuild the verified path index on load.
+- 1.0 payloads that still carry the redundant `path_to_id` table deserialize
+  without error; the redundant field is ignored.
+
+`AbsolutePosition`, `RelativePosition` and `FeedbackSnapshot` serialize as
+their raw forms with the default `serde` feature, and round trips preserve
+the bits exactly.
+
+<Aside type="caution">
+	Raw `u64` values are safe to persist only within one semver-compatible
+	release line of the encoding. The layout is documented and stable, but a
+	major version may redefine it; re-derive raw values across major
+	upgrades.
+</Aside>
+
+## Next steps
+
+- Follow <LinkCard title="Working with positions" href="/guides/working-with-positions/" /> for construction and conversion recipes.
+- Check <LinkCard title="Errors" href="/reference/errors/" /> for the error variants named in the limits table.
+- Read <LinkCard title="Why Sourcier exists" href="/explanation/why-sourcier/" /> for the reasoning behind packing spans into `u64`s.
