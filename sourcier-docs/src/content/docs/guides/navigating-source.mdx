@@ -1,0 +1,129 @@
+---
+title: Views and navigation
+description: Extract the exact bytes of a span, bridge byte offsets and packed positions, and render path:line:column diagnostics without allocating.
+type: how-to
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Use this guide to turn positions back into source bytes and to navigate files
+byte-accurately. Everything on this page requires the default `view` feature.
+
+## Extract the bytes of a span
+
+`view` returns the exact bytes a position covers, including multi-line spans
+and the line terminators inside them:
+
+```rust
+use sourcier::{AbsolutePosition, SourceFilePosition, SourceFilesMap};
+
+let mut files = SourceFilesMap::<u8>::new();
+files
+	.add_file("src/main.rs", b"fn main() {\n    println!(\"Hello\");\n}")
+	.expect("capacity available");
+files.finalize().expect("no capacity issue");
+
+let id = files.get_id("src/main.rs").expect("file present");
+let pos = AbsolutePosition::new(id, 2, 5, 2, 22);
+
+assert_eq!(files.view(id, &pos), Some(&b"println!(\"Hello\");"[..]));
+```
+
+For UTF-8 source, `view_str` returns a `&str` instead and yields `None` when
+the span would cut a multi-byte character:
+
+```rust
+let text = files.view_str(id, &pos).expect("utf-8 span");
+assert_eq!(text, "println!(\"Hello\");");
+```
+
+`view` also handles zero-width spans, which resolve to the empty slice at the
+requested point.
+
+## Convert byte offsets to positions and back
+
+The map bridges between byte offsets and packed positions in O(log n) over
+the per-file line index, with no allocation:
+
+```rust
+let pos = files.position_from_offset(id, 4).expect("in range");
+assert_eq!(pos.start_line(), 2);
+assert_eq!(pos.start_column(), 1);
+
+assert_eq!(files.offset_from_position(id, &pos), Some(4));
+```
+
+`position_from_offset` returns a zero-width point position. Offsets up to and
+including the content length resolve: the content length maps to the column
+one past the last byte, the conventional insertion anchor at the end of the
+file.
+
+<Aside type="caution">
+	Offsets whose line or column cannot be represented by the packed encoding
+	resolve to `None`: files of more than 65,535 lines, or lines longer than
+	255 bytes.
+</Aside>
+
+## Render diagnostics
+
+`display_position` renders `path:line:column` through a borrowed
+`PositionDisplay`. Building it performs no allocation, so it is cheap to
+format diagnostics at high volume:
+
+```rust
+use sourcier::{SourceFilesBuilder, SourceFilePosition};
+
+let files = SourceFilesBuilder::<u8>::new()
+	.add_file("src/main.rs", b"fn main() {}")
+	.expect("capacity available")
+	.finalize()
+	.expect("no capacity issue");
+
+let id = files.get_id("src/main.rs").expect("file present");
+let pos = files.position_from_offset(id, 4).expect("in range");
+
+let rendered = files.display_position(id, &pos).expect("present").to_string();
+assert_eq!(rendered, "src/main.rs:1:5");
+```
+
+## Work with the line index directly
+
+`line_offsets` exposes the per-file `LineOffsets` index that backs the
+operations above. You can also compute one standalone from any bytes:
+
+```rust
+use sourcier::LineOffsets;
+
+let offsets = LineOffsets::compute(b"one\ntwo").expect("within 4 GiB limit");
+assert_eq!(offsets.line_count(), 2);
+
+// Byte range of line 2 (one-based; line 0 resolves to nothing).
+assert_eq!(offsets.line_range(2), Some(4..7));
+
+// Offset to (line, column), both one-based.
+assert_eq!(offsets.line_col_from_offset(5), Some((2, 2)));
+
+// (line, column) back to offset.
+assert_eq!(offsets.offset_from_line_col(2, 1), Some(4));
+```
+
+Other accessors: `content_length` returns the total byte length, and
+`line_starts` exposes the compact `u32` offset list.
+
+## Know the limits
+
+| Limit | Value | Behavior when exceeded |
+| ----- | ----- | ---------------------- |
+| File size for the line index | 4 GiB (`u32` offsets) | `LineOffsets::compute` fails with `MapError::FileTooLarge`; files registered through a map resolve no views |
+| Lines per file | 65,535 (`u16`) | Offset conversion returns `None` |
+| Columns per line | 255 byte columns (`u8`) | Offset conversion returns `None` |
+
+Line offsets use a single `memchr`-accelerated scan and store 4 bytes per
+line. Enable the opt-in `parallel` feature to spread the scan across cores —
+see [Tuning performance](/guides/tuning-performance/).
+
+## Next steps
+
+- Follow <LinkCard title="Sharing usage statistics" href="/guides/usage-statistics/" /> to observe finalization activity across maps.
+- Follow <LinkCard title="Tuning performance" href="/guides/tuning-performance/" /> for large file sets.
+- Check <LinkCard title="Position encoding" href="/reference/position-encoding/" /> for the limits behind `None` results.
