@@ -1,0 +1,24 @@
+---
+title: Page not found
+description: "The requested page does not exist in the Sourcier documentation."
+# Draft: Starlight's built-in 404 route finds this entry via getEntry (which
+# includes drafts) while the dynamic [...slug] route generation excludes
+# drafts in production, so no conflicting /404 route is generated.
+draft: true
+head:
+  # The draft entry makes Starlight render its draft notice above the 404
+  # content; hide it on this page only — the notice is meaningless to
+  # visitors who hit a missing URL.
+  - tag: style
+    content: ".content-panel .sl-container > p.sl-flex { display: none; }"
+---
+
+import { LinkCard } from "@astrojs/starlight/components";
+
+The page you requested does not exist. Use the sidebar or the search dialog
+to find what you are looking for, or start from one of the entry points
+below:
+
+- <LinkCard title="Overview" href="/" />
+- <LinkCard title="Your first source map" href="/tutorials/getting-started/" />
+- <LinkCard title="API surface" href="/reference/api/" />
