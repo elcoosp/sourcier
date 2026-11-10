@@ -4,7 +4,7 @@ description: What the serde, view, rt-feedback and parallel Cargo features gate,
 type: reference
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 All features are enabled by default and forwarded to the `sourcier-core`
 engine crate. You only configure features on the `sourcier` facade.
@@ -37,24 +37,18 @@ processing large file sets; it adds the `rayon` dependency.
 
 Keep only byte extraction:
 
-```toml
-[dependencies]
-sourcier = { version = "2.0", default-features = false, features = ["view"] }
-```
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
 
 Keep serialization but no views and no statistics:
 
-```toml
-[dependencies]
-sourcier = { version = "2.0", default-features = false, features = ["serde"] }
-```
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["serde"] }`} />
 
 Enable everything including parallelism:
 
-```toml
-[dependencies]
-sourcier = { version = "2.0", features = ["parallel"] }
-```
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", features = ["parallel"] }`} />
 
 <Aside type="caution">
 	Disabling a feature removes its APIs from the compiled crate: code that

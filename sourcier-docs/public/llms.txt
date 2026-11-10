@@ -1,0 +1,23 @@
+# sourcier
+
+> AI-agent index.
+
+- [Page not found](/404/) — The requested page does not exist in the Sourcier documentation.
+- [Performance design](/explanation/performance-design/) — The data structures behind the benchmarks — the verified path index, inline path storage, memchr line scans and the rebuilt-on-load wire format.
+- [Safety and stability](/explanation/safety-and-stability/) — How Sourcier forbids unsafe code, seals its traits, keeps error enums non_exhaustive, and pins behavior with a layered test suite.
+- [The two-phase lifecycle](/explanation/two-phase-lifecycle/) — Why SourceFilesMap splits into a mutable build phase and an immutable lookup phase, and how the type-state builder enforces the boundary.
+- [Why Sourcier exists](/explanation/why-sourcier/) — The problem of cheap diagnostics positions in compilers, linters and language servers, and the design Sourcier chose for it.
+- [Handling errors](/guides/handling-errors/) — Distinguish every MapError and PositionError variant, match them exhaustively despite non_exhaustive, and recover with the right fallback.
+- [Installation](/guides/installation/) — Add Sourcier to a Rust project from crates.io or Git, verify the MSRV and trim feature flags for a leaner build.
+- [Views and navigation](/guides/navigating-source/) — Extract the exact bytes of a span, bridge byte offsets and packed positions, and render path:line:column diagnostics without allocating.
+- [Registering source files](/guides/registering-files/) — Register single files, loops, all-or-nothing batches and OS paths; control capacity and resolve duplicate registrations.
+- [Tuning performance](/guides/tuning-performance/) — Pre-reserve capacity, choose the right id type, opt into parallel index construction and trim features for faster builds and leaner binaries.
+- [Sharing usage statistics](/guides/usage-statistics/) — Observe finalization activity across maps and threads with the lock-free RuntimeFeedback context.
+- [Working with positions](/guides/working-with-positions/) — Create packed spans with checked and unchecked constructors, convert between absolute and relative forms, and order or serialize them.
+- [Sourcier](/) — Compact and efficient source file mapping and position tracking for Rust — register files once, pack every span into a single u64.
+- [API surface](/reference/api/) — Complete reference for every public type, trait and function Sourcier exports, with signatures, parameters and return values.
+- [Changelog](/reference/changelog/) — Release history of Sourcier, currently version 2.0 with the builder, offset bridge and verified path index.
+- [Errors](/reference/errors/) — Every MapError and PositionError variant with fields, display strings and the conditions that produce them.
+- [Feature flags](/reference/feature-flags/) — What the serde, view, rt-feedback and parallel Cargo features gate, their defaults and how to trim them.
+- [Position encoding](/reference/position-encoding/) — Stable u64 bit layouts for AbsolutePosition and RelativePosition, the reserved zero encoding, and wire-format compatibility rules.
+- [Your first source map](/tutorials/getting-started/) — Register source files, assign stable ids, pack a span into a single u64 and extract the exact bytes it covers.

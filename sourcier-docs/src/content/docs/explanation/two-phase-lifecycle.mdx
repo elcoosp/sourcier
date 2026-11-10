@@ -4,7 +4,7 @@ description: Why SourceFilesMap splits into a mutable build phase and an immutab
 type: explanation
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 Every `SourceFilesMap` lives through two phases: a mutable **build phase** in
 which files are registered, and an immutable **lookup phase** in which ids
@@ -69,17 +69,15 @@ build-phase map and exposes only the registration API, so mutation after
 finalization cannot be expressed, and its `finalize` consumes the builder
 and returns a map that is already in its lookup phase:
 
-```rust
-use sourcier::SourceFilesBuilder;
+<Code lang="rust" code={`use sourcier::SourceFilesBuilder;
 
 let files = SourceFilesBuilder::<u8>::new()
-	.add_file("src/main.rs", b"fn main() {}")
-	.expect("capacity available")
-	.add_file("src/lib.rs", b"pub mod utils;")
-	.expect("capacity available")
-	.finalize()
-	.expect("no capacity issue");
-```
+    .add_file("src/main.rs", b"fn main() {}")
+    .expect("capacity available")
+    .add_file("src/lib.rs", b"pub mod utils;")
+    .expect("capacity available")
+    .finalize()
+    .expect("no capacity issue");`} />
 
 The phase errors are unrepresentable through the builder; the compiler
 enforces the lifecycle. Choose the builder when the lifecycle is linear —

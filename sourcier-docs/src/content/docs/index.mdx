@@ -4,9 +4,10 @@ description: Compact and efficient source file mapping and position tracking for
 template: splash
 type: explanation
 hero:
+  title: "Sourcier"
   tagline: Compact and efficient source file mapping and position tracking for Rust. Register source files once, hand out stable numeric ids, and pack every span — file id, line and column — into a single `u64`.
   image:
-    file: ../../assets/logo.svg
+    file: ../../assets/logo.png
     alt: The Sourcier logo — three stacked layers connected by a glowing path
   actions:
     - text: Start the tutorial
@@ -20,7 +21,7 @@ hero:
       icon: external
 ---
 
-import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
 
 Sourcier is built for diagnostics-heavy tools — compilers, linters, formatters,
 language servers and code editors — that need positions which are cheap to
@@ -53,6 +54,8 @@ keep the heavy data in a single immutable registry.
 		<LinkCard title="Read the design notes" href="/explanation/why-sourcier/" />
 	</Card>
 </CardGrid>
+
+<LinkButton href="/tutorials/getting-started/" icon="right-arrow">Start the tutorial</LinkButton>
 
 ## Highlights
 

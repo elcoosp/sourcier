@@ -4,7 +4,7 @@ description: Register source files, assign stable ids, pack a span into a single
 type: tutorial
 ---
 
-import { Aside, LinkCard, Steps } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard, Steps } from '@astrojs/starlight/components';
 
 This tutorial walks you through the golden path of Sourcier: registering two
 source files, finalizing the map, looking files up by path and id, packing a
@@ -23,16 +23,12 @@ minutes.
 <Steps>
 1. Create a new binary crate and enter it:
 
-	```bash
-	cargo new span-demo
-	cd span-demo
-	```
+	<Code lang="bash" code={`cargo new span-demo
+cd span-demo`} />
 
 2. Add Sourcier as a dependency:
 
-	```bash
-	cargo add sourcier
-	```
+	<Code lang="bash" code={`cargo add sourcier`} />
 
 	Cargo adds the current `2.0` release to `Cargo.toml`.
 
@@ -47,38 +43,32 @@ one-based ids.
 
 Add this code to `src/main.rs`:
 
-```rust
-use sourcier::SourceFilesMap;
+<Code lang="rust" code={`use sourcier::SourceFilesMap;
 
 fn main() {
-	// u8 ids support up to 255 files; u16 supports 65,535.
-	let mut files = SourceFilesMap::<u8>::new();
+    // u8 ids support up to 255 files; u16 supports 65,535.
+    let mut files = SourceFilesMap::<u8>::new();
 
-	files
-		.add_file("src/main.rs", b"fn main() {\n    println!(\"Hello\");\n}")
-		.expect("capacity available");
-	files
-		.add_file("src/lib.rs", b"pub mod utils;")
-		.expect("capacity available");
+    files
+        .add_file("src/main.rs", b"fn main() {\\n    println!(\\"Hello\\");\\n}")
+        .expect("capacity available");
+    files
+        .add_file("src/lib.rs", b"pub mod utils;")
+        .expect("capacity available");
 
-	// Sorts by path, deduplicates, assigns one-based ids.
-	files.finalize().expect("no capacity issue");
+    // Sorts by path, deduplicates, assigns one-based ids.
+    files.finalize().expect("no capacity issue");
 
-	println!("registered {} files", files.len());
-}
-```
+    println!("registered {} files", files.len());
+}`} />
 
 Run the program:
 
-```bash
-cargo run
-```
+<Code lang="bash" code={`cargo run`} />
 
 You see the expected output:
 
-```ansi
-registered 2 files
-```
+<Code lang="ansi" code={`registered 2 files`} />
 
 <Aside type="note">
 	`add_file` accepts any `impl AsRef<str>` for the path and
@@ -90,8 +80,7 @@ registered 2 files
 
 After finalization, the map answers queries in constant time. Extend `main`:
 
-```rust
-// Path to id, and id back to path.
+<Code lang="rust" code={`// Path to id, and id back to path.
 let id = files.get_id("src/main.rs").expect("file present");
 assert_eq!(files.get_path(id), Some("src/main.rs"));
 
@@ -101,8 +90,7 @@ assert_eq!(id, 1);
 // Id to full borrowed entry.
 let entry = files.get(id).expect("file present");
 assert_eq!(entry.path, "src/main.rs");
-assert!(entry.content.starts_with(b"fn main"));
-```
+assert!(entry.content.starts_with(b"fn main"));`} />
 
 `src/lib.rs` sorts before `src/main.rs`, so it receives id `1` and
 `src/main.rs` receives id `2`. Sorted ids are stable: the same set of files
@@ -114,8 +102,7 @@ always produces the same ids, which makes them safe to persist.
 line and end column — into one `u64`. Lines and columns are one-based and the
 end is inclusive:
 
-```rust
-use sourcier::{AbsolutePosition, SourceFilePosition};
+<Code lang="rust" code={`use sourcier::{AbsolutePosition, SourceFilePosition};
 
 let pos = AbsolutePosition::new(id, 2, 5, 2, 22);
 
@@ -123,29 +110,24 @@ assert_eq!(pos.file_id(), id);
 assert_eq!(pos.start_line(), 2);
 assert_eq!(pos.start_column(), 5);
 assert_eq!(pos.end_line(), 2);
-assert_eq!(pos.end_column(), 22);
-```
+assert_eq!(pos.end_column(), 22);`} />
 
 `AbsolutePosition::new` is infallible and zero-cost: values are encoded as-is.
 Use `try_new` when you want the span validated as a well-formed, one-based
 region:
 
-```rust
-assert!(AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1).is_err());
-assert!(AbsolutePosition::<u8>::try_new(1, 1, 1, 1, 1).is_ok());
-```
+<Code lang="rust" code={`assert!(AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1).is_err());
+assert!(AbsolutePosition::<u8>::try_new(1, 1, 1, 1, 1).is_ok());`} />
 
 ## Extract the exact bytes of the span
 
 With the default `view` feature, the map bridges positions back to the bytes
 they cover:
 
-```rust
-assert_eq!(
-	files.view(id, &pos),
-	Some(&b"println!(\"Hello\");"[..])
-);
-```
+<Code lang="rust" code={`assert_eq!(
+    files.view(id, &pos),
+    Some(&b"println!(\\"Hello\\");"[..])
+);`} />
 
 `view` returns the bytes of the span including any line terminators it
 covers. For UTF-8 source you can use `view_str`, which returns `&str` and
@@ -155,15 +137,11 @@ Your program now registers files, looks them up, packs positions and extracts
 source bytes. Print the extracted view at the end of `main` to see it in
 action:
 
-```rust
-if let Some(bytes) = files.view(id, &pos) {
-	println!("{}", String::from_utf8_lossy(bytes));
-}
-```
+<Code lang="rust" code={`if let Some(bytes) = files.view(id, &pos) {
+    println!("{}", String::from_utf8_lossy(bytes));
+}`} />
 
-```ansi
-println!("Hello");
-```
+<Code lang="ansi" code={`println!("Hello");`} />
 
 ## Next steps
 

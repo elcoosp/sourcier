@@ -4,7 +4,7 @@ description: Add Sourcier to a Rust project from crates.io or Git, verify the MS
 type: how-to
 ---
 
-import { Aside, LinkCard, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
 
 Use this guide to add Sourcier to an existing Rust project and to configure
 its feature flags. Sourcier supports Rust 1.99 and later (Edition 2024); the
@@ -14,17 +14,13 @@ MSRV is verified in CI across feature configurations.
 
 <Tabs>
 	<TabItem label="cargo add">
-		```bash
-		cargo add sourcier
-		```
+		<Code lang="bash" code={`cargo add sourcier`} />
 
 		Cargo adds the latest `2.0` release and enables the default features.
 	</TabItem>
 	<TabItem label="Cargo.toml">
-		```toml
-		[dependencies]
-		sourcier = "2.0"
-		```
+		<Code lang="toml" code={`[dependencies]
+sourcier = "2.0"`} />
 	</TabItem>
 </Tabs>
 
@@ -35,31 +31,25 @@ small and the facade stable.
 <Aside type="note">
 	Prefer a living dependency? Track the repository directly:
 
-	```toml
-	[dependencies]
-	sourcier = { git = "https://github.com/elcoosp/sourcier", branch = "main" }
-	```
+	<Code lang="toml" code={`[dependencies]
+sourcier = { git = "https://github.com/elcoosp/sourcier", branch = "main" }`} />
 </Aside>
 
 ## Verify the install
 
 Compile a three-line program that touches the public API:
 
-```rust
-use sourcier::{SourceFilesBuilder, SourceFilesMap};
+<Code lang="rust" code={`use sourcier::{SourceFilesBuilder, SourceFilesMap};
 
 let files = SourceFilesBuilder::<u8>::new()
-	.add_file("a.rs", b"fn a() {}")
-	.expect("capacity available")
-	.finalize()
-	.expect("no capacity issue");
+    .add_file("a.rs", b"fn a() {}")
+    .expect("capacity available")
+    .finalize()
+    .expect("no capacity issue");
 
-let _: &str = files.get_path(1).expect("file present");
-```
+let _: &str = files.get_path(1).expect("file present");`} />
 
-```bash
-cargo build
-```
+<Code lang="bash" code={`cargo build`} />
 
 A successful build prints nothing. Any `unresolved import` error means the
 dependency did not resolve — check that `Cargo.lock` contains `sourcier`.
@@ -69,10 +59,8 @@ dependency did not resolve — check that `Cargo.lock` contains `sourcier`.
 All features except `parallel` are enabled by default and forwarded to
 `sourcier-core`. Disable the ones you do not need for a leaner build:
 
-```toml
-[dependencies]
-sourcier = { version = "2.0", default-features = false, features = ["view"] }
-```
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
 
 This keeps the line-offset index and byte extraction while dropping
 serialization and runtime statistics. See

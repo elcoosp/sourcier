@@ -4,7 +4,7 @@ description: Pre-reserve capacity, choose the right id type, opt into parallel i
 type: how-to
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 Use this guide when maps grow large, when finalization shows up in profiles,
 or when binary size matters. The numbers quoted here come from the bundled
@@ -16,12 +16,10 @@ comparing 2.0 against the 1.0 baseline; treat them as indicative.
 Both the map and the builder accept an expected file count, which
 pre-reserves storage and reduces reallocations while building:
 
-```rust
-use sourcier::SourceFilesBuilder;
+<Code lang="rust" code={`use sourcier::SourceFilesBuilder;
 
 let builder = SourceFilesBuilder::<u16>::with_capacity(4_096);
-assert_eq!(builder.remaining_capacity(), 65_535);
-```
+assert_eq!(builder.remaining_capacity(), 65_535);`} />
 
 ## Choose the smallest id type that fits
 
@@ -42,10 +40,8 @@ Line-offset indexes are built with a single `memchr`-accelerated scan by
 default. The opt-in `parallel` feature spreads that scan across cores with
 `rayon` for huge file sets:
 
-```toml
-[dependencies]
-sourcier = { version = "2.0", features = ["parallel"] }
-```
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", features = ["parallel"] }`} />
 
 <Aside type="note">
 	On a 2-core reference VM the thread-pool overhead outweighed the scan
@@ -58,10 +54,8 @@ sourcier = { version = "2.0", features = ["parallel"] }
 Default features pull in `serde`, `view` and `rt-feedback`. Disable what your
 tool does not use:
 
-```toml
-[dependencies]
-sourcier = { version = "2.0", default-features = false, features = ["view"] }
-```
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
 
 Each trimmed feature removes code from the binary and work from the build;
 see [Feature flags](/reference/feature-flags/) for what each one gates.
@@ -93,9 +87,7 @@ design rationale lives in [Performance design](/explanation/performance-design/)
 The benchmark tracks for the builder, the offset bridge and lookups are part
 of the repository, so you can pin the costs your tool depends on:
 
-```bash
-cargo bench -p sourcier-core
-```
+<Code lang="bash" code={`cargo bench -p sourcier-core`} />
 
 ## Next steps
 

@@ -1,0 +1,1966 @@
+---
+title: Page not found
+description: "The requested page does not exist in the Sourcier documentation."
+# Draft: Starlight's built-in 404 route finds this entry via getEntry (which
+# includes drafts) while the dynamic [...slug] route generation excludes
+# drafts in production, so no conflicting /404 route is generated.
+draft: true
+head:
+  # The draft entry makes Starlight render its draft notice above the 404
+  # content; hide it on this page only — the notice is meaningless to
+  # visitors who hit a missing URL.
+  - tag: style
+    content: ".content-panel .sl-container > p.sl-flex { display: none; }"
+---
+
+import { LinkCard } from "@astrojs/starlight/components";
+
+The page you requested does not exist. Use the sidebar or the search dialog
+to find what you are looking for, or start from one of the entry points
+below:
+
+- <LinkCard title="Overview" href="/" />
+- <LinkCard title="Your first source map" href="/tutorials/getting-started/" />
+- <LinkCard title="API surface" href="/reference/api/" />
+
+
+---
+
+---
+title: Performance design
+description: The data structures behind the benchmarks — the verified path index, inline path storage, memchr line scans and the rebuilt-on-load wire format.
+type: explanation
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Sourcier's performance comes from a small set of data-structure decisions,
+each of which trades complexity in one place for a constant-factor win where
+tools spend their time. This page walks through those decisions and the
+numbers they produce. All measurements come from the bundled criterion suite
+(`cargo bench -p sourcier-core`) on the reference machine, comparing 2.0
+against the 1.0 baseline in the same measurement window; treat the numbers
+as indicative.
+
+## A verified open-addressed path index
+
+Path lookups run through a per-map open-addressed index from path hash to
+entry. Three properties define it:
+
+- **Seeded per map.** The hash uses two parallel multiply chains and one
+  combine multiply with a seed that differs per map, so adversarial
+  collision patterns cannot be precomputed (HashDoS resistance).
+- **Verified probes.** A hash match is only a prefilter: every probe is
+  verified against the stored path bytes. Collisions can never produce a
+  wrong answer, whatever the hash quality.
+- **Dense and predictable.** Linear probing at a load factor of 0.5 with 4
+  bytes per slot; probes terminate on the first empty slot, so misses are as
+  cheap as hits.
+
+The measured trade-off: 2.0 spends about 20% more latency on hits
+(~41 us vs ~34 us per 2,000 lookups) in exchange for byte-exact
+verification, zero allocations at finalization and roughly half the
+lookup-state memory. Misses, at ~33 us per 2,000, are a new tracked
+scenario.
+
+## Inline path storage
+
+Entries store paths with short-string optimization: paths up to 30 bytes
+live inline inside the 32-byte payload, and longer paths fall back to a
+`Box<str>`. Most source-tree paths fit the inline bound, which keeps the hot
+lookup path at two dependent cache lines — the index slot and the entry —
+and makes finalization allocation-free for typical trees.
+
+## One sort, one pass
+
+Finalization is a single unstable sort with a registration-order tiebreak
+plus one O(n) pass that assigns ids and builds the index. File contents are
+never copied during finalization. The measured effect:
+
+| Scenario | 1.0 | 2.0 | Change |
+| -------- | --- | --- | ------ |
+| Finalize 100 files × 50 lines | ~64 us | ~41 us | **-35%** |
+| Finalize 500 files × 100 lines | ~709 us | ~513 us | **-28%** |
+| Finalize phase only, 2,000 × 200 lines | ~3.7 ms | ~2.8 ms | **-25%** |
+
+## memchr line scans
+
+The `view` feature indexes every file's line boundaries with a single
+`memchr`-accelerated scan — the 1.0 counting pre-pass is gone — and stores 4
+bytes per line as `u32` offsets, which caps indexable files at 4 GiB. Line
+and column navigation is binary search over that compact list:
+
+| Scenario | 1.0 | 2.0 | Change |
+| -------- | --- | --- | ------ |
+| 1,000 multi-line `view` extractions | ~14.4 us | ~4.4 us | **-70%** |
+| Line offsets for 100 files × 1,000 lines | ~0.79 ms | ~0.69 ms | **-12%** |
+| 1,000 offset-to-(line, col) probes | — | ~8.2 us | new |
+| Single-line `view_str` span | — | ~257 ns | new |
+
+Per-file line offsets live in a dense `Vec<Option<LineOffsets>>` indexed by
+id, so the view hot path performs no hashing at all. The opt-in `parallel`
+feature spreads the scan across cores with `rayon`; on the 2-core reference
+VM the thread-pool overhead outweighed the scan savings, which is why it is
+not a default.
+
+<Aside type="note">
+	The `builder/*`, `position_from_offset/*` and `offset_from_position/*`
+	benchmark tracks pin the cost of the 2.0 additions; the original
+	`finalize`, `get_id`, `view` and `line_offsets` tracks are unchanged.
+</Aside>
+
+## The wire format carries data, not derived state
+
+Serialized payloads contain only the raw entries and the phase flag. The
+redundant `path_to_id` table of the 1.0 format is gone: the index is derived
+from the sorted entries and rebuilt on load, and 1.0 payloads still
+deserialize with the redundant field ignored. The entry hash and sequence
+number are likewise derived state — the hash depends on the per-map seed —
+so they are rebuilt rather than persisted.
+
+The DX additions delegate to the same machinery rather than adding new
+paths: the builder is an inline newtype over the map, the offset bridge
+reuses the per-file `LineOffsets` index, and `PositionDisplay` renders
+lazily from borrowed data. `rt-feedback` uses atomics only; no locks are
+taken on the reporting path.
+
+## Next steps
+
+- Follow <LinkCard title="Tuning performance" href="/guides/tuning-performance/" /> to apply these characteristics in your build.
+- Read <LinkCard title="The two-phase lifecycle" href="/explanation/two-phase-lifecycle/" /> for the phase boundary that makes the index possible.
+- Check <LinkCard title="Position encoding" href="/reference/position-encoding/" /> for the packed layouts behind the numbers.
+
+
+---
+
+---
+title: Safety and stability
+description: How Sourcier forbids unsafe code, seals its traits, keeps error enums non_exhaustive, and pins behavior with a layered test suite.
+type: explanation
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Sourcier makes promises that tools can build on: no unsafe code, a stable
+and semver-checked API, and behavior pinned by property, snapshot and
+coverage-verified tests. This page explains each guarantee and how it is
+enforced.
+
+## No unsafe code
+
+The whole workspace carries `#![forbid(unsafe_code)]`. Every guarantee in
+the crate — bit packing, index probing, zero-copy views — is expressed in
+safe Rust. There is no unsafe block to audit, and the compiler rejects any
+introduction of one.
+
+## Sealed traits and non_exhaustive errors
+
+Two type-level decisions keep future releases from breaking your code:
+
+- **The `FileId` trait is sealed.** Its only implementations are `u8` and
+  `u16`, and the sealing module makes downstream implementations
+  impossible. New methods with default implementations can therefore be
+  added to the trait in a minor release without breaking any downstream
+  code.
+- **Error enums are `#[non_exhaustive]`.** `MapError` and `PositionError`
+  can gain variants in minor releases without a semver-breaking change.
+  Match arms outside the crate include a catch-all arm; the compiler
+  enforces this.
+
+## Semver policy
+
+The public API documented on docs.rs is stable and follows semantic
+versioning from 2.0.0 onward. Two specifics worth knowing:
+
+- The packed `u64` layouts are documented so raw values can be persisted;
+  they are stable across semver-compatible releases. See
+  [Position encoding](/reference/position-encoding/).
+- The 2.0 wire format dropped the redundant `path_to_id` table, and 1.0
+  payloads that still carry the field deserialize without error — forward
+  compatibility is explicit and tested.
+
+## The layered test suite
+
+The repository ships unit, integration, property-based, snapshot and doc
+tests:
+
+| Layer | Tool | Pins |
+| ----- | ---- | ---- |
+| Unit and integration | `cargo test` / `cargo nextest run` | Per-module behavior, builder and navigation flows |
+| Property-based | `proptest` | Position encoding round trips, line/col to offset inverse mapping, map lookup consistency, first-registration-wins duplicate resolution at hundreds-of-files scale |
+| Snapshot | `insta` | YAML snapshots of map serialization, view extraction, packed positions and error messages |
+| Doc tests | `cargo test` | Every code example in the rustdoc compiles and runs |
+
+The property suite also covers adversarial deserialized maps that exceed the
+id capacity, and the 4 GiB line-offset limit is exercised end to end with
+lazily committed allocations, so oversized-file paths are tested for real.
+
+Snapshot files live in `sourcier-core/src/tests/snapshots/` and are
+committed; regenerate them after an intentional change with
+`INSTA_UPDATE=always cargo test`.
+
+## Coverage and static checks
+
+CI runs the full gate:
+
+<Code lang="bash" code={`cargo test --workspace --all-features      # unit, integration, property, doc tests
+cargo nextest run --workspace --all-features
+cargo llvm-cov --workspace --all-features --summary-only
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo fmt --all -- --check
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
+cargo deny check                           # licenses, advisories, bans, sources`} />
+
+Coverage measured with `cargo-llvm-cov` reports 100% of functions covered;
+`llvm-cov show` confirms every line and every reachable region executes. The
+summary table reports 99.9% for lines and regions — the residual counts are
+uncallable compiler artifacts (definition-site copies of generic code), not
+missing tests.
+
+`missing_docs` is denied workspace-wide, so every public item carries
+documentation, and rustdoc builds with warnings denied.
+
+## The MSRV contract
+
+The minimum supported Rust version is 1.99, verified in CI with `cargo
+check` across feature configurations. The crate uses Edition 2024.
+
+## Next steps
+
+- Read <LinkCard title="The two-phase lifecycle" href="/explanation/two-phase-lifecycle/" /> for the invariants the tests pin.
+- Check <LinkCard title="Errors" href="/reference/errors/" /> for the variants the `non_exhaustive` policy applies to.
+- Browse the [repository](https://github.com/elcoosp/sourcier) for the CI workflows and `deny.toml`.
+
+
+---
+
+---
+title: The two-phase lifecycle
+description: Why SourceFilesMap splits into a mutable build phase and an immutable lookup phase, and how the type-state builder enforces the boundary.
+type: explanation
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Every `SourceFilesMap` lives through two phases: a mutable **build phase** in
+which files are registered, and an immutable **lookup phase** in which ids
+exist and queries run in constant time. The phase boundary is the
+`finalize` call, and it is what allows both phases to be fast.
+
+## The build phase
+
+During the build phase the map is an append-only registry. `add_file`,
+`add_files` and `add_path` append entries — path, content and registration
+order — without doing any sorting, hashing or index construction. Nothing
+about ids exists yet: ids are an output of finalization, not an input.
+
+This keeps registration as cheap as possible. A tool that discovers files
+while walking a directory tree, or that ingests files from a language-server
+client, pays only the cost of storing each entry.
+
+## What finalization does
+
+`finalize` performs three steps in one pass structure:
+
+1. **Sort.** Entries are sorted by path with a single unstable sort. Ties —
+   entries that registered the same path — keep registration order.
+2. **Deduplicate.** For duplicate paths, the first registration wins and
+   later ones are dropped. The rule holds deterministically even at
+   hundreds-of-duplicates scale, which property tests pin.
+3. **Assign ids.** Files receive one-based ids in sorted path order, so the
+   same set of files always produces the same ids.
+
+Finalization is zero-allocation for typical source trees: paths up to 30
+bytes live inline inside their entries, file contents are never copied, and
+the lookup index is built over the already-stored paths. After the call the
+map is immutable.
+
+## The lookup phase
+
+Immutability is the performance trick. Because the entry set cannot change
+after finalization, the path index can be a verified open-addressed hash
+table sized once, with no tombstones, no rehashing and no mutation
+synchronization. `get_id`, `get_path`, `get_content` and `get` run in
+constant time; line and column navigation runs in O(log n) over the per-file
+line index.
+
+Iterating a map before finalization yields nothing: `Iter` filters on the
+phase flag because ids only exist afterwards.
+
+<Aside type="note">
+	Serialized payloads carry only the raw entries and the phase flag. The
+	lookup state is rebuilt on load, so a deserialized map behaves exactly
+	like a finalized one.
+</Aside>
+
+## Why the builder exists
+
+The raw map tracks its phase at runtime and reports mistakes as errors:
+`MapError::Finalized` when you mutate after finalization,
+`MapError::AlreadyFinalized` when you finalize twice. Those errors are part
+of the API for tools that must keep a map through both phases.
+
+`SourceFilesBuilder` removes the mistakes at the type level. It wraps a
+build-phase map and exposes only the registration API, so mutation after
+finalization cannot be expressed, and its `finalize` consumes the builder
+and returns a map that is already in its lookup phase:
+
+<Code lang="rust" code={`use sourcier::SourceFilesBuilder;
+
+let files = SourceFilesBuilder::<u8>::new()
+    .add_file("src/main.rs", b"fn main() {}")
+    .expect("capacity available")
+    .add_file("src/lib.rs", b"pub mod utils;")
+    .expect("capacity available")
+    .finalize()
+    .expect("no capacity issue");`} />
+
+The phase errors are unrepresentable through the builder; the compiler
+enforces the lifecycle. Choose the builder when the lifecycle is linear —
+register, finalize, then query — and the raw map when a tool legitimately
+moves a single map between phases.
+
+## Next steps
+
+- Follow <LinkCard title="Registering source files" href="/guides/registering-files/" /> for the registration recipes the build phase offers.
+- Read <LinkCard title="Performance design" href="/explanation/performance-design/" /> for the verified index that finalization builds.
+- Check the <LinkCard title="API surface" href="/reference/api/" /> for the exact signatures of both phases.
+
+
+---
+
+---
+title: Why Sourcier exists
+description: The problem of cheap diagnostics positions in compilers, linters and language servers, and the design Sourcier chose for it.
+type: explanation
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Tools that report diagnostics — compilers, linters, formatters, language
+servers and code editors — handle positions constantly. Every warning, error,
+highlight, jump target and rename needs to say where it points. The obvious
+representation, a `String` path plus a handful of `usize` fields per
+diagnostic, is expensive in every dimension that matters at scale.
+
+## The cost of the obvious representation
+
+A diagnostic position that stores its file path as a `String` pays repeatedly
+for that choice:
+
+- **Memory.** A path is stored, cloned or re-allocated for every position
+  that carries it. A codebase with a million diagnostics stores the same
+  paths a million times, directly or behind reference counters.
+- **Comparison and ordering.** Sorting diagnostics by location means
+  comparing strings before comparing numbers. String comparison is slower
+  than integer comparison and harder to make cache-friendly.
+- **Serialization.** Every position serializes its path again. Wire payloads
+  and caches bloat, and round trips can silently change path formatting.
+- **Locality.** A position spread over five or more fields is not one value:
+  it is five values that must travel, hash, compare and persist together.
+
+Positions also need to resolve back to the exact bytes they cover — for
+quick fixes, for snippets in reports, for hover content. That resolution
+needs the file content, which compounds the problem: content lookups should
+be as cheap as the positions themselves.
+
+## The Sourcier answer
+
+Sourcier splits the problem in two and gives each half the cheapest possible
+representation:
+
+1. **A single immutable registry holds the heavy data.** Files are registered
+   once, deduplicated and sorted during finalization, and the map then
+   answers path, id and content lookups in constant time. Heavy data exists
+   exactly once, no matter how many positions point at it.
+2. **A position is one `u64`.** File id, start line, start column, end line
+   and end column are bit-packed into a single machine word. Positions are
+   `Copy`, compare as integers, hash as integers, serialize as integers and
+   order lexicographically by construction.
+
+A million diagnostics therefore carry a million machine words plus one
+registry — not a million copies of paths and field tuples.
+
+<Aside type="note">
+	The packed layout is documented and stable, so raw `u64` values can be
+	persisted and reloaded. See
+	[Position encoding](/reference/position-encoding/) for the bit tables.
+</Aside>
+
+## What Sourcier is not
+
+Sourcier is not a source-map implementation for transpiled code: it does not
+map between source and generated files, and it does not encode token names or
+mappings segments. It tracks positions in the files a tool actually reads.
+If your tool parses source files and reports locations inside them, Sourcier
+is designed for you.
+
+## Design values
+
+The API follows from four commitments:
+
+- **Cheap by default.** Positions pack with no validation cost; validation is
+  an opt-in `try_new` away. Finalization performs no per-path heap
+  allocation for typical source trees.
+- **Correct under pressure.** The path index verifies every probe against
+  the stored bytes, so adversarial keys cannot precompute collisions, and
+  duplicate registrations resolve deterministically.
+- **Typed at the boundaries.** The `FileId` trait is sealed, error enums are
+  `#[non_exhaustive]`, and the whole workspace forbids unsafe code.
+- **Bytes when you need them.** The `view` feature keeps a compact line
+  index per file, so any position resolves to the exact bytes it covers.
+
+## Next steps
+
+- Read <LinkCard title="The two-phase lifecycle" href="/explanation/two-phase-lifecycle/" /> for the build-finalize-lookup split that makes the registry immutable.
+- Read <LinkCard title="Performance design" href="/explanation/performance-design/" /> for the data structures behind the constants.
+- Follow <LinkCard title="Your first source map" href="/tutorials/getting-started/" /> to see the design in ten minutes of code.
+
+
+---
+
+---
+title: Handling errors
+description: Distinguish every MapError and PositionError variant, match them exhaustively despite non_exhaustive, and recover with the right fallback.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Use this guide to handle the two error enums Sourcier returns:
+`MapError` for building or querying a map, and `PositionError` for checked
+position constructors. Both enums are `#[non_exhaustive]`, so match arms
+outside the crate always include a catch-all arm.
+
+## Match MapError variants
+
+`MapError` has five variants. This example recovers from each one
+appropriately:
+
+<Code lang="rust" code={`use sourcier::{MapError, SourceFilesBuilder};
+
+fn register(builder: &mut SourceFilesBuilder<u8>, path: &str, data: &[u8]) {
+    if let Err(err) = builder.add_file_mut(path, data) {
+        match err {
+            MapError::TooManyFiles { max } => {
+                eprintln!("id type exhausted: at most {max} files");
+                // Recover: switch to u16 ids, or stop accepting files.
+            }
+            MapError::FileTooLarge { size } => {
+                eprintln!("file of {size} bytes exceeds the 4 GiB line-offset limit");
+                // Recover: skip the file; views resolve to None for it.
+            }
+            MapError::PathNotUtf8 { path } => {
+                eprintln!("skipping non-UTF-8 path: {path}");
+                // Recover: skip; the path carries U+FFFD replacements.
+            }
+            // The map cannot be modified after finalization; with the
+            // type-state builder these two variants are unrepresentable,
+            // but the raw map can still report them.
+            MapError::Finalized | MapError::AlreadyFinalized => {
+                unreachable!("builder guarantees the build phase")
+            }
+            // non_exhaustive: always keep a catch-all arm.
+            other => {
+                eprintln!("unexpected map error: {other}");
+            }
+        }
+    }
+}`} />
+
+The variants and when they occur:
+
+| Variant | Fields | Occurs when |
+| ------- | ------ | ----------- |
+| `TooManyFiles` | `max: usize` | Registration or finalization exceeds the id type capacity (255 for `u8`, 65,535 for `u16`) |
+| `AlreadyFinalized` | — | `finalize` is called on an already finalized map |
+| `Finalized` | — | The finalized map is mutated (`add_file`, `add_files`, `add_path`) |
+| `FileTooLarge` | `size: u64` | A file exceeds the 4 GiB `u32` line-offset limit |
+| `PathNotUtf8` | `path: String` | `add_path` receives a path that is not valid UTF-8 |
+
+<Aside type="tip">
+	`SourceFilesBuilder` exposes only the registration API and `finalize`
+	consumes it, so `MapError::Finalized` and `MapError::AlreadyFinalized`
+	cannot be produced through the builder. They remain reachable through the
+	raw `SourceFilesMap`, which keeps its phase errors at runtime.
+</Aside>
+
+## Handle checked position failures
+
+`PositionError` has a single variant, `InvalidRange`, which carries the
+rejected span:
+
+<Code lang="rust" code={`use sourcier::{AbsolutePosition, PositionError};
+
+match AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1) {
+    Ok(pos) => println!("packed as {}", pos.as_raw()),
+    Err(PositionError::InvalidRange { start_line, start_col, end_line, end_col }) => {
+        eprintln!(
+            "invalid span {start_line}:{start_col}-{end_line}:{end_col}"
+        );
+    }
+    Err(_) => unreachable!("only one variant exists today"),
+}`} />
+
+A valid span satisfies all of the following:
+
+- `start_line >= 1` and `end_line >= 1`
+- `start_col >= 1` and `end_col >= 1`
+- `start_line < end_line`, or `start_line == end_line && start_col <= end_col`
+
+## Read the display strings
+
+Both enums implement `std::error::Error` through `thiserror`, and their
+display strings are part of the API surface and covered by snapshot tests:
+
+<Code lang="text" code={`cannot register more than 255 files for this file id type
+the source files map has already been finalized
+cannot modify the source files map after finalization
+file content of 4294967296 bytes exceeds the 4 GiB line offset limit
+path is not valid UTF-8: caf<U+FFFD>.txt
+invalid position range: start 2:1 must not come after end 1:1 and all lines and columns must be at least 1`} />
+
+## Plan for capacity up front
+
+`MapError::TooManyFiles` is the variant most tools meet first. Choose the id
+type before registration starts: `u8` addresses 255 files, `u16` addresses
+65,535. Check `remaining_capacity` on a builder to fail early with your own
+message instead of surfacing the library error.
+
+## Next steps
+
+- Follow <LinkCard title="Registering source files" href="/guides/registering-files/" /> to avoid capacity errors in the first place.
+- Check the <LinkCard title="Errors reference" href="/reference/errors/" /> for the complete variant list with field tables.
+- Read <LinkCard title="Safety and stability" href="/explanation/safety-and-stability/" /> to see how `non_exhaustive` interacts with the semver policy.
+
+
+---
+
+---
+title: Installation
+description: Add Sourcier to a Rust project from crates.io or Git, verify the MSRV and trim feature flags for a leaner build.
+type: how-to
+---
+
+import { Aside, Code, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Use this guide to add Sourcier to an existing Rust project and to configure
+its feature flags. Sourcier supports Rust 1.99 and later (Edition 2024); the
+MSRV is verified in CI across feature configurations.
+
+## Add the dependency
+
+<Tabs>
+	<TabItem label="cargo add">
+		<Code lang="bash" code={`cargo add sourcier`} />
+
+		Cargo adds the latest `2.0` release and enables the default features.
+	</TabItem>
+	<TabItem label="Cargo.toml">
+		<Code lang="toml" code={`[dependencies]
+sourcier = "2.0"`} />
+	</TabItem>
+</Tabs>
+
+You only ever depend on `sourcier`. It re-exports the full API of the
+`sourcier-core` engine crate, which exists so the implementation can stay
+small and the facade stable.
+
+<Aside type="note">
+	Prefer a living dependency? Track the repository directly:
+
+	<Code lang="toml" code={`[dependencies]
+sourcier = { git = "https://github.com/elcoosp/sourcier", branch = "main" }`} />
+</Aside>
+
+## Verify the install
+
+Compile a three-line program that touches the public API:
+
+<Code lang="rust" code={`use sourcier::{SourceFilesBuilder, SourceFilesMap};
+
+let files = SourceFilesBuilder::<u8>::new()
+    .add_file("a.rs", b"fn a() {}")
+    .expect("capacity available")
+    .finalize()
+    .expect("no capacity issue");
+
+let _: &str = files.get_path(1).expect("file present");`} />
+
+<Code lang="bash" code={`cargo build`} />
+
+A successful build prints nothing. Any `unresolved import` error means the
+dependency did not resolve — check that `Cargo.lock` contains `sourcier`.
+
+## Trim feature flags
+
+All features except `parallel` are enabled by default and forwarded to
+`sourcier-core`. Disable the ones you do not need for a leaner build:
+
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
+
+This keeps the line-offset index and byte extraction while dropping
+serialization and runtime statistics. See
+[Feature flags](/reference/feature-flags/) for the full matrix and what each
+feature gates.
+
+<Aside type="caution">
+	Disabling `view` removes `view`, `view_str`, `position_from_offset`,
+	`offset_from_position` and `display_position`. Code that calls them fails
+	to compile until you re-enable the feature.
+</Aside>
+
+## Next steps
+
+- Follow <LinkCard title="Your first source map" href="/tutorials/getting-started/" /> for the complete workflow.
+- Follow <LinkCard title="Registering source files" href="/guides/registering-files/" /> to put the dependency to work.
+- Check <LinkCard title="Feature flags" href="/reference/feature-flags/" /> before trimming further.
+
+
+---
+
+---
+title: Views and navigation
+description: Extract the exact bytes of a span, bridge byte offsets and packed positions, and render path:line:column diagnostics without allocating.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Use this guide to turn positions back into source bytes and to navigate files
+byte-accurately. Everything on this page requires the default `view` feature.
+
+## Extract the bytes of a span
+
+`view` returns the exact bytes a position covers, including multi-line spans
+and the line terminators inside them:
+
+<Code lang="rust" code={`use sourcier::{AbsolutePosition, SourceFilePosition, SourceFilesMap};
+
+let mut files = SourceFilesMap::<u8>::new();
+files
+    .add_file("src/main.rs", b"fn main() {\\n    println!(\\"Hello\\");\\n}")
+    .expect("capacity available");
+files.finalize().expect("no capacity issue");
+
+let id = files.get_id("src/main.rs").expect("file present");
+let pos = AbsolutePosition::new(id, 2, 5, 2, 22);
+
+assert_eq!(files.view(id, &pos), Some(&b"println!(\\"Hello\\");"[..]));`} />
+
+For UTF-8 source, `view_str` returns a `&str` instead and yields `None` when
+the span would cut a multi-byte character:
+
+<Code lang="rust" code={`let text = files.view_str(id, &pos).expect("utf-8 span");
+assert_eq!(text, "println!(\\"Hello\\");");`} />
+
+`view` also handles zero-width spans, which resolve to the empty slice at the
+requested point.
+
+## Convert byte offsets to positions and back
+
+The map bridges between byte offsets and packed positions in O(log n) over
+the per-file line index, with no allocation:
+
+<Code lang="rust" code={`let pos = files.position_from_offset(id, 4).expect("in range");
+assert_eq!(pos.start_line(), 2);
+assert_eq!(pos.start_column(), 1);
+
+assert_eq!(files.offset_from_position(id, &pos), Some(4));`} />
+
+`position_from_offset` returns a zero-width point position. Offsets up to and
+including the content length resolve: the content length maps to the column
+one past the last byte, the conventional insertion anchor at the end of the
+file.
+
+<Aside type="caution">
+	Offsets whose line or column cannot be represented by the packed encoding
+	resolve to `None`: files of more than 65,535 lines, or lines longer than
+	255 bytes.
+</Aside>
+
+## Render diagnostics
+
+`display_position` renders `path:line:column` through a borrowed
+`PositionDisplay`. Building it performs no allocation, so it is cheap to
+format diagnostics at high volume:
+
+<Code lang="rust" code={`use sourcier::{SourceFilesBuilder, SourceFilePosition};
+
+let files = SourceFilesBuilder::<u8>::new()
+    .add_file("src/main.rs", b"fn main() {}")
+    .expect("capacity available")
+    .finalize()
+    .expect("no capacity issue");
+
+let id = files.get_id("src/main.rs").expect("file present");
+let pos = files.position_from_offset(id, 4).expect("in range");
+
+let rendered = files.display_position(id, &pos).expect("present").to_string();
+assert_eq!(rendered, "src/main.rs:1:5");`} />
+
+## Work with the line index directly
+
+`line_offsets` exposes the per-file `LineOffsets` index that backs the
+operations above. You can also compute one standalone from any bytes:
+
+<Code lang="rust" code={`use sourcier::LineOffsets;
+
+let offsets = LineOffsets::compute(b"one\\ntwo").expect("within 4 GiB limit");
+assert_eq!(offsets.line_count(), 2);
+
+// Byte range of line 2 (one-based; line 0 resolves to nothing).
+assert_eq!(offsets.line_range(2), Some(4..7));
+
+// Offset to (line, column), both one-based.
+assert_eq!(offsets.line_col_from_offset(5), Some((2, 2)));
+
+// (line, column) back to offset.
+assert_eq!(offsets.offset_from_line_col(2, 1), Some(4));`} />
+
+Other accessors: `content_length` returns the total byte length, and
+`line_starts` exposes the compact `u32` offset list.
+
+## Know the limits
+
+| Limit | Value | Behavior when exceeded |
+| ----- | ----- | ---------------------- |
+| File size for the line index | 4 GiB (`u32` offsets) | `LineOffsets::compute` fails with `MapError::FileTooLarge`; files registered through a map resolve no views |
+| Lines per file | 65,535 (`u16`) | Offset conversion returns `None` |
+| Columns per line | 255 byte columns (`u8`) | Offset conversion returns `None` |
+
+Line offsets use a single `memchr`-accelerated scan and store 4 bytes per
+line. Enable the opt-in `parallel` feature to spread the scan across cores —
+see [Tuning performance](/guides/tuning-performance/).
+
+## Next steps
+
+- Follow <LinkCard title="Sharing usage statistics" href="/guides/usage-statistics/" /> to observe finalization activity across maps.
+- Follow <LinkCard title="Tuning performance" href="/guides/tuning-performance/" /> for large file sets.
+- Check <LinkCard title="Position encoding" href="/reference/position-encoding/" /> for the limits behind `None` results.
+
+
+---
+
+---
+title: Registering source files
+description: Register single files, loops, all-or-nothing batches and OS paths; control capacity and resolve duplicate registrations.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Use this guide to choose the right registration API for your situation and to
+predict how Sourcier resolves duplicates and capacity. Registration happens
+in the build phase; finalization then sorts entries by path and assigns
+stable one-based ids.
+
+## Register a single file
+
+`add_file` accepts any path that converts to `&str` and any content that
+converts to `Vec<u8>`:
+
+<Code lang="rust" code={`use sourcier::SourceFilesMap;
+
+let mut files = SourceFilesMap::<u8>::new();
+files
+    .add_file("src/main.rs", b"fn main() {}")
+    .expect("capacity available");`} />
+
+The only failure is an exhausted id type (`MapError::TooManyFiles`).
+
+## Register in a loop
+
+`add_file` consumes and returns the map or builder for chaining. Inside a
+loop, prefer the mutating variant `add_file_mut`, which keeps the value in
+place after an error:
+
+<Code lang="rust" code={`use sourcier::{SourceFilesBuilder, SourceFilesMap};
+
+fn collect(names: &[&str]) -> SourceFilesMap<u16> {
+    let mut builder = SourceFilesBuilder::<u16>::with_capacity(names.len());
+    for name in names {
+        builder
+            .add_file_mut(format!("src/{name}.rs"), format!("// {name}"))
+            .expect("u16 capacity");
+    }
+    builder.finalize().expect("no capacity issue")
+}`} />
+
+`with_capacity` pre-reserves storage for the expected file count and reduces
+reallocations while building.
+
+## Register an all-or-nothing batch
+
+`add_files` registers an iterator of `(path, content)` pairs and leaves the
+map or builder exactly as it was when any pair fails:
+
+<Code lang="rust" code={`use sourcier::SourceFilesMap;
+
+let mut files = SourceFilesMap::<u8>::new();
+let batch = vec![
+    ("a.rs", &b"fn a() {}"[..]),
+    ("b.rs", &b"fn b() {}"[..]),
+];
+
+files.add_files(batch).expect("capacity available");
+files.finalize().expect("no capacity issue");
+assert_eq!(files.len(), 2);`} />
+
+Because the batch is atomic, a failure partway through cannot leave a
+partially registered set behind.
+
+## Register OS paths
+
+Tools that hold `Path`/`PathBuf` values register through `add_path`. Paths
+are stored as `str`, so a path carrying bytes that are not valid UTF-8 fails
+with `MapError::PathNotUtf8`, which carries the lossy rendering of the path
+for diagnostics:
+
+<Code lang="rust" code={`use sourcier::{MapError, SourceFilesBuilder};
+use std::path::PathBuf;
+
+let files = SourceFilesBuilder::<u8>::new()
+    .add_path(PathBuf::from("src/main.rs"), b"fn main() {}")
+    .expect("utf-8 path")
+    .finalize()
+    .expect("no capacity issue");
+
+assert_eq!(files.get_id("src/main.rs"), Some(1));`} />
+
+<Aside type="caution">
+	Non-UTF-8 paths cannot be registered losslessly. Convert them at the
+	boundary of your tool and report `MapError::PathNotUtf8` with its `path`
+	field to the user.
+</Aside>
+
+## Handle duplicate paths
+
+You can register the same path any number of times. Duplicates are resolved
+during `finalize`: the first registration of a path wins, later ones are
+dropped, and the resolution holds even at hundreds-of-duplicates scale
+(property-tested):
+
+<Code lang="rust" code={`use sourcier::SourceFilesMap;
+
+let mut files = SourceFilesMap::<u8>::new();
+files.add_file("a.rs", b"first").expect("capacity available");
+files.add_file("a.rs", b"second").expect("capacity available");
+files.finalize().expect("no capacity issue");
+
+assert_eq!(files.get_content(1), Some(&b"first"[..]));`} />
+
+## Watch the capacity of the id type
+
+The id type bounds how many files the map can address. Ids are one-based, so
+`0` is never assigned:
+
+| Id type | Max files | File id bits | Choose when |
+| ------- | --------- | ------------ | ----------- |
+| `u8`    | 255       | 8            | Single-crate tools, tests, small codebases |
+| `u16`   | 65,535    | 16           | Language servers, monorepos, indexers |
+
+Call `remaining_capacity` on a builder to learn how many more files the id
+type can address:
+
+<Code lang="rust" code={`let mut builder = SourceFilesBuilder::<u8>::new();
+assert_eq!(builder.remaining_capacity(), 255);`} />
+
+Exceeding the limit fails with `MapError::TooManyFiles { max }`, both during
+registration and during finalization.
+
+## Next steps
+
+- Follow <LinkCard title="Working with positions" href="/guides/working-with-positions/" /> to pack spans against the files you registered.
+- Read <LinkCard title="The two-phase lifecycle" href="/explanation/two-phase-lifecycle/" /> to understand why finalization is the phase boundary.
+- Check <LinkCard title="Errors" href="/reference/errors/" /> when a registration call returns an error variant.
+
+
+---
+
+---
+title: Tuning performance
+description: Pre-reserve capacity, choose the right id type, opt into parallel index construction and trim features for faster builds and leaner binaries.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Use this guide when maps grow large, when finalization shows up in profiles,
+or when binary size matters. The numbers quoted here come from the bundled
+criterion suite (`cargo bench -p sourcier-core`) on the reference machine
+comparing 2.0 against the 1.0 baseline; treat them as indicative.
+
+## Pre-reserve capacity
+
+Both the map and the builder accept an expected file count, which
+pre-reserves storage and reduces reallocations while building:
+
+<Code lang="rust" code={`use sourcier::SourceFilesBuilder;
+
+let builder = SourceFilesBuilder::<u16>::with_capacity(4_096);
+assert_eq!(builder.remaining_capacity(), 65_535);`} />
+
+## Choose the smallest id type that fits
+
+The id type sets both the capacity and the packed encoding:
+
+| Id type | Max files | File id bits | Best for |
+| ------- | --------- | ------------ | -------- |
+| `u8`    | 255       | 8            | Single-crate tools, tests, small codebases |
+| `u16`   | 65,535    | 16           | Language servers, monorepos, indexers |
+
+Smaller id types leave more bits to the other fields of the packed `u64`, and
+`u8` positions are the `CompactAbsolutePosition` alias that many diagnostics
+caches prefer.
+
+## Opt into parallel index construction
+
+Line-offset indexes are built with a single `memchr`-accelerated scan by
+default. The opt-in `parallel` feature spreads that scan across cores with
+`rayon` for huge file sets:
+
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", features = ["parallel"] }`} />
+
+<Aside type="note">
+	On a 2-core reference VM the thread-pool overhead outweighed the scan
+	savings, which is why the feature is opt-in. Enable it on many-core build
+	machines where file sets are large.
+</Aside>
+
+## Trim features for a leaner build
+
+Default features pull in `serde`, `view` and `rt-feedback`. Disable what your
+tool does not use:
+
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
+
+Each trimmed feature removes code from the binary and work from the build;
+see [Feature flags](/reference/feature-flags/) for what each one gates.
+
+## Know what the costs are
+
+Measured scenarios from the bundled benchmark suite:
+
+| Scenario | 1.0 | 2.0 | Change |
+| -------- | --- | --- | ------ |
+| Finalize 100 files × 50 lines | ~64 us | ~41 us | **-35%** |
+| Finalize 500 files × 100 lines | ~709 us | ~513 us | **-28%** |
+| Finalize phase only, 2,000 × 200 lines | ~3.7 ms | ~2.8 ms | **-25%** |
+| 1,000 multi-line `view` extractions | ~14.4 us | ~4.4 us | **-70%** |
+| Line offsets for 100 files × 1,000 lines | ~0.79 ms | ~0.69 ms | **-12%** |
+| 1,000 offset-to-(line, col) probes | — | ~8.2 us | new |
+| Single-line `view_str` span | — | ~257 ns | new |
+| 2,000 path-to-id lookups (hits) | ~34 us | ~41 us | see note |
+| 2,000 path-to-id lookups (misses) | — | ~33 us | new |
+
+The 2.0 path-to-id index trades a small amount of hit latency (~20%) for
+byte-exact verification, HashDoS-resistant per-map seeding, zero allocations
+at finalization and roughly half the lookup-state memory. Hits and misses
+both terminate on the first empty slot, so misses are as cheap as hits. The
+design rationale lives in [Performance design](/explanation/performance-design/).
+
+## Pin the costs in CI
+
+The benchmark tracks for the builder, the offset bridge and lookups are part
+of the repository, so you can pin the costs your tool depends on:
+
+<Code lang="bash" code={`cargo bench -p sourcier-core`} />
+
+## Next steps
+
+- Read <LinkCard title="Performance design" href="/explanation/performance-design/" /> for the data-structure rationale behind the numbers.
+- Follow <LinkCard title="Registering source files" href="/guides/registering-files/" /> for the capacity APIs used above.
+- Check <LinkCard title="Feature flags" href="/reference/feature-flags/" /> before trimming further.
+
+
+---
+
+---
+title: Sharing usage statistics
+description: Observe finalization activity across maps and threads with the lock-free RuntimeFeedback context.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Use this guide to collect usage statistics when your tool builds many source
+file maps. Everything on this page requires the default `rt-feedback`
+feature. The context is lock-free: finalizing a map updates the counters
+with atomic operations, so multiple maps and threads can report into the same
+context without blocking.
+
+## Create a shared feedback context
+
+Create one `RuntimeFeedback`, wrap it in an `Arc` and hand it to the map:
+
+<Code lang="rust" code={`use std::sync::Arc;
+
+use sourcier::{RuntimeFeedback, SourceFilesMap};
+
+let feedback = Arc::new(RuntimeFeedback::new());
+
+let mut files = SourceFilesMap::<u8>::with_feedback(Arc::clone(&feedback));
+files.add_file("a.rs", b"fn a() {}").expect("capacity available");
+files.finalize().expect("no capacity issue");`} />
+
+Builders accept the same context through
+`SourceFilesBuilder::with_feedback`.
+
+## Read a snapshot
+
+`snapshot` returns an immutable, `Copy` snapshot of the counters:
+
+<Code lang="rust" code={`let snapshot = feedback.snapshot();
+
+assert_eq!(snapshot.total_files, 1);
+assert_eq!(snapshot.total_bytes, 9);
+assert_eq!(snapshot.max_file_size, 9);
+assert_eq!(snapshot.usage_count, 1);`} />
+
+The snapshot fields:
+
+| Field | Meaning |
+| ----- | ------- |
+| `total_files` | Number of files registered by the last finalized map |
+| `total_bytes` | Total content bytes registered by the last finalized map |
+| `max_file_size` | Size in bytes of the largest file of the last finalized map |
+| `usage_count` | Number of finalizations that reported into this context |
+
+<Aside type="note">
+	Each successful finalization **overwrites** the per-map totals (`total_files`,
+	`total_bytes`, `max_file_size`) with that map's values and **increments**
+	`usage_count`. Totals therefore describe the most recent finalization, not
+	the sum of all finalizations.
+</Aside>
+
+## Report from multiple threads
+
+The reporting path takes no locks, so threads only contend on atomic
+instructions. Share the `Arc` across workers and read the counters whenever
+you need them:
+
+<Code lang="rust" code={`use std::sync::Arc;
+
+use sourcier::{RuntimeFeedback, SourceFilesBuilder};
+
+let feedback = Arc::new(RuntimeFeedback::new());
+
+let handles: Vec<_> = (0..4)
+    .map(|i| {
+        let feedback = Arc::clone(&feedback);
+        std::thread::spawn(move || {
+            let mut files = SourceFilesBuilder::<u8>::with_feedback(feedback);
+            files
+                .add_file(format!("{i}.rs"), b"fn x() {}")
+                .expect("capacity available");
+            files.finalize().expect("no capacity issue");
+        })
+    })
+    .collect();
+
+for handle in handles {
+    handle.join().expect("worker finished");
+}
+
+assert_eq!(feedback.snapshot().usage_count, 4);`} />
+
+With the default `serde` feature, `FeedbackSnapshot` also implements
+`Serialize` and `Deserialize`, so you can log or persist snapshots directly.
+
+## Next steps
+
+- Follow <LinkCard title="Registering source files" href="/guides/registering-files/" /> for the registration API the counters observe.
+- Check <LinkCard title="API surface" href="/reference/api/" /> for the full `RuntimeFeedback` and `FeedbackSnapshot` signatures.
+
+
+---
+
+---
+title: Working with positions
+description: Create packed spans with checked and unchecked constructors, convert between absolute and relative forms, and order or serialize them.
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Use this guide to create, validate, convert, order and serialize packed
+positions. Two types cover the two situations you meet in a tool:
+`AbsolutePosition<Id>` addresses a span in a specific file of a map, and
+`RelativePosition` carries only the span — start line, start column, end
+line, end column — so you can store or compare it without binding it to a
+file.
+
+## Create an absolute position
+
+`AbsolutePosition::new` packs the five components as-is. It is infallible and
+zero-cost:
+
+<Code lang="rust" code={`use sourcier::AbsolutePosition;
+
+// file id 7, start 2:5, end 2:22 (inclusive).
+let pos = AbsolutePosition::<u8>::new(7, 2, 5, 2, 22);`} />
+
+Lines and columns are one-based; the end line and end column are inclusive.
+The packed value orders like a natural lexicographic ordering of spans, so
+positions sort with integer comparison.
+
+## Validate spans with checked constructors
+
+When a span comes from user input or an untrusted source, use `try_new`. It
+returns `PositionError::InvalidRange` when any line or column is zero, or
+when the start does not come before (or exactly at) the end:
+
+<Code lang="rust" code={`use sourcier::AbsolutePosition;
+
+assert!(AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1).is_err());
+assert!(AbsolutePosition::<u8>::try_new(1, 1, 5, 1, 4).is_err());
+assert!(AbsolutePosition::<u8>::try_new(1, 1, 1, 1, 1).is_ok());
+assert!(AbsolutePosition::<u8>::try_new(1, 1, 4, 1, 5).is_ok());`} />
+
+`RelativePosition::try_new` applies the same rules to file-agnostic spans.
+
+## Convert between absolute and relative
+
+Strip the file id with `to_relative`, and attach one with
+`RelativePosition::to_absolute`:
+
+<Code lang="rust" code={`use sourcier::{AbsolutePosition, RelativePosition};
+
+let abs = AbsolutePosition::<u8>::new(7, 2, 5, 2, 22);
+assert_eq!(abs.to_relative(), RelativePosition::new(2, 5, 2, 22));
+
+let rel = RelativePosition::new(2, 5, 2, 22);
+assert_eq!(rel.to_absolute(3_u8), AbsolutePosition::<u8>::new(3, 2, 5, 2, 22));`} />
+
+`From<AbsolutePosition<Id>> for RelativePosition` is also implemented, so
+`let rel: RelativePosition = abs.into();` works.
+
+## Build spans in const contexts
+
+`RelativePosition::new` and `RelativePosition::from_raw` are `const fn`, so
+spans can be built and stored in `const` and `static` items:
+
+<Code lang="rust" code={`use sourcier::RelativePosition;
+
+const STD_SPAN: RelativePosition = RelativePosition::new(1, 1, 1, 1);`} />
+
+<Aside type="note">
+	`AbsolutePosition::new` is not a `const fn` because it routes the id
+	through the `FileId` trait; use the const `RelativePosition` constructors
+	when you need compile-time packing.
+</Aside>
+
+## Round-trip through the raw encoding
+
+`as_raw` returns the stable `u64` encoding and `from_raw` rebuilds a
+position from it. For absolute positions, `from_raw` returns `None` when the
+embedded file id cannot be represented by `Id` — including the
+never-assigned id `0`:
+
+<Code lang="rust" code={`use sourcier::AbsolutePosition;
+
+let pos = AbsolutePosition::<u8>::new(42, 1, 2, 3, 4);
+let copy = AbsolutePosition::<u8>::from_raw(pos.as_raw()).expect("valid raw value");
+assert_eq!(pos, copy);`} />
+
+The bit layout is stable across semver-compatible releases, so raw values
+can be persisted safely. See [Position encoding](/reference/position-encoding/)
+for the exact bit ranges.
+
+## Order and compare
+
+Positions derive `PartialOrd` and `Ord`. Ordering by the packed value equals
+ordering spans lexicographically: file id first, then start line, start
+column, end line and end column:
+
+<Code lang="rust" code={`use sourcier::AbsolutePosition;
+
+let a = AbsolutePosition::<u8>::new(1, 1, 1, 1, 1);
+let b = AbsolutePosition::<u8>::new(1, 1, 1, 1, 2);
+let c = AbsolutePosition::<u8>::new(1, 2, 1, 2, 1);
+let d = AbsolutePosition::<u8>::new(2, 1, 1, 1, 1);
+assert!(a < b && b < c && c < d);`} />
+
+## Serialize positions
+
+With the default `serde` feature, both position types implement
+`Serialize` and `Deserialize`, and a round trip preserves the bits exactly:
+
+<Code lang="rust" code={`use sourcier::RelativePosition;
+
+let pos = RelativePosition::new(2, 5, 3, 10);
+let json = serde_json::to_string(&pos).expect("serializable");
+assert_eq!(serde_json::from_str::<RelativePosition>(&json).expect("valid"), pos);`} />
+
+## Render spans as text
+
+`Display` renders `start_line:start_column-end_line:end_column`:
+
+<Code lang="rust" code={`use sourcier::{AbsolutePosition, RelativePosition};
+
+assert_eq!(AbsolutePosition::<u8>::new(1, 10, 5, 12, 20).to_string(), "10:5-12:20");
+assert_eq!(RelativePosition::new(2, 5, 2, 22).to_string(), "2:5-2:22");`} />
+
+To render a position together with its file path as `path:line:column`, use
+`display_position` on a finalized map — see
+[Views and navigation](/guides/navigating-source/).
+
+## Next steps
+
+- Follow <LinkCard title="Views and navigation" href="/guides/navigating-source/" /> to bridge byte offsets and positions.
+- Check <LinkCard title="Position encoding" href="/reference/position-encoding/" /> before persisting raw values.
+- Check <LinkCard title="Errors" href="/reference/errors/" /> for the exact shape of `PositionError::InvalidRange`.
+
+
+---
+
+---
+title: Sourcier
+description: Compact and efficient source file mapping and position tracking for Rust — register files once, pack every span into a single u64.
+template: splash
+type: explanation
+hero:
+  title: "Sourcier"
+  tagline: Compact and efficient source file mapping and position tracking for Rust. Register source files once, hand out stable numeric ids, and pack every span — file id, line and column — into a single `u64`.
+  image:
+    file: ../../assets/logo.png
+    alt: The Sourcier logo — three stacked layers connected by a glowing path
+  actions:
+    - text: Start the tutorial
+      link: /tutorials/getting-started/
+      icon: right-arrow
+    - text: Installation
+      link: /guides/installation/
+      icon: external
+    - text: API reference
+      link: /reference/api/
+      icon: external
+---
+
+import { Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
+
+Sourcier is built for diagnostics-heavy tools — compilers, linters, formatters,
+language servers and code editors — that need positions which are cheap to
+build, compare, store and serialize, yet still resolve back to the exact bytes
+of the file they point at. Instead of dragging `String` paths and four `usize`
+fields through every diagnostic, you pack the whole span into one `u64` and
+keep the heavy data in a single immutable registry.
+
+## Choose your path
+
+<CardGrid stagger>
+	<Card title="Learn the golden path">
+		Follow the tutorial to register files, finalize a map, and extract the
+		exact bytes of a span in about ten minutes.
+		<LinkCard title="Your first source map" href="/tutorials/getting-started/" />
+	</Card>
+	<Card title="Solve a specific task">
+		Task-oriented guides cover installation, registration, packed positions,
+		byte views, shared statistics, errors and performance tuning.
+		<LinkCard title="Browse the how-to guides" href="/guides/installation/" />
+	</Card>
+	<Card title="Look something up">
+		Reference pages document the full API surface, the stable `u64` bit
+		layouts, feature flags and every error variant.
+		<LinkCard title="Open the reference" href="/reference/api/" />
+	</Card>
+	<Card title="Understand the design">
+		Explanation pages walk through the two-phase lifecycle, the verified
+		path index and the safety guarantees that shape the API.
+		<LinkCard title="Read the design notes" href="/explanation/why-sourcier/" />
+	</Card>
+</CardGrid>
+
+<LinkButton href="/tutorials/getting-started/" icon="right-arrow">Start the tutorial</LinkButton>
+
+## Highlights
+
+- **One `u64` per span.** File id, start line, start column, end line and end
+  column are bit-packed together. Positions are `Copy`, cache-friendly, order
+  naturally as integers and survive serialization round trips bit-exactly.
+- **Constant-time lookups.** After finalization, path to id, id to path and id
+  to content are all O(1); line and column navigation is O(log n).
+- **Byte-accurate views.** With the default `view` feature, a position resolves
+  to the exact bytes it covers, including multi-line spans and line terminators.
+- **No unsafe code.** The whole workspace is `#![forbid(unsafe_code)]`, error
+  enums are `#[non_exhaustive]`, and the `FileId` trait is sealed.
+
+
+---
+
+---
+title: API surface
+description: Complete reference for every public type, trait and function Sourcier exports, with signatures, parameters and return values.
+type: reference
+---
+
+import { Aside, Badge, LinkCard } from '@astrojs/starlight/components';
+
+Sourcier is a facade crate: `sourcier` re-exports the full API of
+`sourcier-core`, so `sourcier::...` is the only path you ever need. This page
+lists every public item with its signature. The rustdoc-generated reference
+lives on [docs.rs/sourcier](https://docs.rs/sourcier).
+
+## Registry types
+
+### `SourceFilesMap<Id: FileId>`
+
+Two-phase registry: register files, finalize, then query immutably.
+
+| Method | Signature | Returns | Description |
+| ------ | --------- | ------- | ----------- |
+| `new` | `pub fn new() -> Self` | `Self` | Empty map without pre-reserved storage |
+| `with_capacity` | `pub fn with_capacity(expected_files: usize) -> Self` | `Self` | Empty map that pre-reserves storage |
+| `with_feedback` <Badge text="rt-feedback" size="small" /> | `pub fn with_feedback(feedback: Arc<RuntimeFeedback>) -> Self` | `Self` | Map that reports finalization statistics |
+| `add_file` | `pub fn add_file(&mut self, path: impl AsRef<str>, content: impl Into<Vec<u8>>) -> Result<(), MapError>` | `Result<(), MapError>` | Registers one file |
+| `add_files` | `pub fn add_files<I, P, C>(&mut self, files: I) -> Result<(), MapError> where I: IntoIterator<Item = (P, C)>` | `Result<(), MapError>` | All-or-nothing batch registration |
+| `add_path` | `pub fn add_path(&mut self, path: impl AsRef<Path>, content: impl Into<Vec<u8>>) -> Result<(), MapError>` | `Result<(), MapError>` | Registers an OS path; fails with `PathNotUtf8` on non-UTF-8 paths |
+| `finalize` | `pub fn finalize(&mut self) -> Result<(), MapError>` | `Result<(), MapError>` | Sorts by path, deduplicates, assigns one-based ids |
+| `is_finalized` | `pub fn is_finalized(&self) -> bool` | `bool` | Phase query |
+| `len` / `is_empty` | `pub fn len(&self) -> usize` / `pub fn is_empty(&self) -> bool` | — | Entry count |
+| `total_bytes` | `pub fn total_bytes(&self) -> usize` | `usize` | Total registered content bytes |
+| `paths` | `pub fn paths(&self) -> impl Iterator<Item = &str>` | iterator | Registered paths |
+| `iter` | `pub fn iter(&self) -> Iter<'_, Id>` | `Iter<'_, Id>` | Files with ids; yields nothing before finalization |
+| `get_id` | `pub fn get_id(&self, path: &str) -> Option<Id>` | `Option<Id>` | Path to id, O(1) after finalization |
+| `get_path` | `pub fn get_path(&self, id: Id) -> Option<&str>` | `Option<&str>` | Id to path, O(1) |
+| `get_content` | `pub fn get_content(&self, id: Id) -> Option<&[u8]>` | `Option<&[u8]>` | Id to content bytes, O(1) |
+| `get` | `pub fn get(&self, id: Id) -> Option<FileRef<'_, Id>>` | `Option<FileRef<'_, Id>>` | Id to a borrowed `FileRef { id, path, content }` |
+| `view` <Badge text="view" size="small" /> | `pub fn view(&self, id: Id, pos: &impl SourceFilePosition) -> Option<&[u8]>` | `Option<&[u8]>` | Exact bytes the position covers |
+| `view_str` <Badge text="view" size="small" /> | `pub fn view_str(&self, id: Id, pos: &impl SourceFilePosition) -> Option<&str>` | `Option<&str>` | UTF-8 view; `None` on non-UTF-8 boundaries |
+| `line_offsets` <Badge text="view" size="small" /> | `pub fn line_offsets(&self, id: Id) -> Option<&LineOffsets>` | `Option<&LineOffsets>` | Per-file line index |
+| `position_from_offset` <Badge text="view" size="small" /> | `pub fn position_from_offset(&self, id: Id, offset: usize) -> Option<AbsolutePosition<Id>>` | `Option<AbsolutePosition<Id>>` | Byte offset to point position, O(log n) |
+| `offset_from_position` <Badge text="view" size="small" /> | `pub fn offset_from_position(&self, id: Id, pos: &impl SourceFilePosition) -> Option<usize>` | `Option<usize>` | Span start to byte offset, O(log n) |
+| `display_position` | `pub fn display_position(&self, id: Id, pos: &impl SourceFilePosition) -> Option<PositionDisplay<'_>>` | `Option<PositionDisplay<'_>>` | Zero-allocation `path:line:column` renderer |
+
+`&SourceFilesMap` implements `IntoIterator`, yielding `FileRef` entries in id
+order; use it like `for entry in &files { ... }`.
+
+### `SourceFilesBuilder<Id: FileId>`
+
+Type-state build-phase companion of `SourceFilesMap`. It only exposes
+registration, so `MapError::Finalized` and `MapError::AlreadyFinalized` are
+unrepresentable, and `finalize` consumes the builder and hands back the
+lookup-ready map.
+
+| Method | Signature | Returns | Description |
+| ------ | --------- | ------- | ----------- |
+| `new` | `pub fn new() -> Self` | `Self` | Empty builder |
+| `with_capacity` | `pub fn with_capacity(expected_files: usize) -> Self` | `Self` | Builder that pre-reserves storage |
+| `with_feedback` <Badge text="rt-feedback" size="small" /> | `pub fn with_feedback(feedback: Arc<RuntimeFeedback>) -> Self` | `Self` | Builder that reports finalization statistics |
+| `add_file` | `pub fn add_file(self, path: impl AsRef<str>, content: impl Into<Vec<u8>>) -> Result<Self, MapError>` | `Result<Self, MapError>` | Chainable registration |
+| `add_file_mut` | `pub fn add_file_mut(&mut self, path: impl AsRef<str>, content: impl Into<Vec<u8>>) -> Result<(), MapError>` | `Result<(), MapError>` | Registration for loops |
+| `add_files` | `pub fn add_files<I, P, C>(&mut self, files: I) -> Result<(), MapError>` | `Result<(), MapError>` | All-or-nothing batch |
+| `add_path` | `pub fn add_path(&mut self, path: impl AsRef<Path>, content: impl Into<Vec<u8>>) -> Result<(), MapError>` | `Result<(), MapError>` | OS-path registration |
+| `len` / `is_empty` | `pub fn len(&self) -> usize` / `pub fn is_empty(&self) -> bool` | — | Files registered so far |
+| `paths` | `pub fn paths(&self) -> impl Iterator<Item = &str>` | iterator | Registered paths, in registration order |
+| `finalize` | `pub fn finalize(self) -> Result<SourceFilesMap<Id>, MapError>` | `Result<SourceFilesMap<Id>, MapError>` | Consumes the builder, returns the map |
+| `remaining_capacity` | `pub fn remaining_capacity(&self) -> usize` | `usize` | How many more files the id type can address |
+
+## Position types
+
+### `AbsolutePosition<Id: FileId>`
+
+A span inside a specific source file, packed into a single `u64`. Aliases:
+`CompactAbsolutePosition = AbsolutePosition<u8>`,
+`StandardAbsolutePosition = AbsolutePosition<u16>`.
+
+| Item | Signature | Description |
+| ---- | --------- | ----------- |
+| `new` | `pub fn new(file_id: Id, start_line: u16, start_col: u8, end_line: u16, end_col: u8) -> Self` | Infallible, zero-cost packing; no validation |
+| `try_new` | `pub fn try_new(...) -> Result<Self, PositionError>` | Same packing with range validation |
+| `from_raw` | `pub fn from_raw(raw: u64) -> Option<Self>` | Rebuilds from the raw encoding; `None` for unrepresentable ids (including `0`) |
+| `as_raw` | `pub const fn as_raw(&self) -> u64` | Stable raw encoding |
+| `to_relative` | `pub fn to_relative(self) -> RelativePosition` | Strips the file id |
+| `file_id` | `pub fn file_id(&self) -> Id` | File id component |
+| `Display` | `"{start_line}:{start_col}-{end_line}:{end_col}"` | `"2:5-2:22"` |
+| Derives | `Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash` + `serde` with the default feature | Ordering matches lexicographic span order |
+
+### `RelativePosition`
+
+A file-agnostic span packed into the low 48 bits of a `u64`; the high 16 bits
+are always zero.
+
+| Item | Signature | Description |
+| ---- | --------- | ----------- |
+| `new` | `pub const fn new(start_line: u16, start_col: u8, end_line: u16, end_col: u8) -> Self` | Const packing for `const`/`static` items |
+| `try_new` | `pub fn try_new(...) -> Result<Self, PositionError>` | Validated packing |
+| `from_raw` | `pub const fn from_raw(raw: u64) -> Self` | Const rebuild; masks the high 16 bits |
+| `as_raw` | `pub const fn as_raw(&self) -> u64` | Raw encoding |
+| `to_absolute` | `pub fn to_absolute<Id: FileId>(self, file_id: Id) -> AbsolutePosition<Id>` | Attaches a file id |
+| `Display` | `"{start_line}:{start_col}-{end_line}:{end_col}"` | `"2:5-3:10"` |
+
+### `SourceFilePosition` (trait)
+
+Uniform accessor trait over both position kinds, implemented by
+`AbsolutePosition<Id>` and `RelativePosition`. Write generic helpers against
+it:
+
+| Method | Signature | Returns |
+| ------ | --------- | ------- |
+| `source_file_id` | `fn source_file_id(&self) -> Option<u16>` | `None` for relative positions |
+| `start_line` | `fn start_line(&self) -> u16` | One-based start line |
+| `start_column` | `fn start_column(&self) -> u8` | One-based start column |
+| `end_line` | `fn end_line(&self) -> u16` | One-based end line |
+| `end_column` | `fn end_column(&self) -> u8` | One-based end column |
+
+## Id type
+
+### `FileId` (sealed trait)
+
+Implemented only by `u8` and `u16`; sealed, so new methods can be added
+without breaking downstream code. Associated constants: `MAX_FILES`,
+`FILE_ID_BITS`, `FILE_ID_SHIFT`, `START_LINE_SHIFT`, `START_COL_SHIFT`,
+`END_LINE_SHIFT`, `END_COL_SHIFT`, `FILE_ID_MASK`, `LINE_MASK`, `COL_MASK`.
+
+| Method | Signature | Description |
+| ------ | --------- | ----------- |
+| `from_index` | `fn from_index(index: usize) -> Option<Self>` | `index 0 -> id 1`; `None` out of range |
+| `to_raw` | `fn to_raw(self) -> u64` | Raw numeric value |
+
+## View feature types
+
+### `LineOffsets`
+
+Compact per-line byte offset index, 4 bytes per line, files up to 4 GiB.
+
+| Method | Signature | Description |
+| ------ | --------- | ----------- |
+| `compute` | `pub fn compute(content: &[u8]) -> Result<Self, MapError>` | Builds the index with a single `memchr` scan; `FileTooLarge` beyond 4 GiB |
+| `line_count` | `pub fn line_count(&self) -> usize` | Number of lines |
+| `content_length` | `pub fn content_length(&self) -> usize` | Total byte length |
+| `line_starts` | `pub fn line_starts(&self) -> &[u32]` | The raw `u32` offset list |
+| `line_range` | `pub fn line_range(&self, line: usize) -> Option<Range<usize>>` | One-based line to byte range; line `0` resolves to `None` |
+| `line_col_from_offset` | `pub fn line_col_from_offset(&self, offset: usize) -> Option<(usize, usize)>` | Offset to one-based `(line, column)` |
+| `offset_from_line_col` | `pub fn offset_from_line_col(&self, line: usize, col: usize) -> Option<usize>` | Inverse mapping |
+
+## Runtime statistics types
+
+### `RuntimeFeedback` :badge[rt-feedback]
+
+Lock-free usage statistics shared between maps via `Arc`.
+
+| Method | Signature | Description |
+| ------ | --------- | ----------- |
+| `new` | `pub fn new() -> Self` | Empty context |
+| `snapshot` | `pub fn snapshot(&self) -> FeedbackSnapshot` | Immutable counter snapshot |
+
+### `FeedbackSnapshot` :badge[rt-feedback]
+
+`Copy` snapshot with public fields `total_files: usize`, `total_bytes: u64`,
+`max_file_size: usize`, `usage_count: u64`. Totals describe the most recent
+finalization; `usage_count` accumulates.
+
+### `PositionDisplay<'a>`
+
+Zero-allocation `path:line:column` renderer created by
+`display_position`. Implements `Display`; the string is formatted lazily from
+borrowed data.
+
+## Iterator types
+
+`Iter<'a, Id>` — created by `iter` and by `&SourceFilesMap`'s
+`IntoIterator`. Yields `FileRef<'a, Id> { id: Id, path: &'a str, content:
+&'a [u8] }` and yields nothing before finalization, because ids only exist
+afterwards.
+
+## Error types
+
+`MapError` and `PositionError` are `#[non_exhaustive]` enums; see
+[Errors](/reference/errors/) for every variant with its fields.
+
+<Aside type="note">
+        Signatures are abbreviated on this page: trait bounds such as
+        `Id: FileId` are implied, and long parameter lists are elided with `...`
+        only where the reference table above lists them in full.
+</Aside>
+
+## Next steps
+
+- Check <LinkCard title="Position encoding" href="/reference/position-encoding/" /> for the bit layouts behind `as_raw`.
+- Check <LinkCard title="Feature flags" href="/reference/feature-flags/" /> for what each badge on this page means.
+- Browse [docs.rs/sourcier](https://docs.rs/sourcier) for the rustdoc-generated API.
+
+
+---
+
+---
+title: Changelog
+description: Release history of Sourcier, currently version 2.0 with the builder, offset bridge and verified path index.
+type: reference
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+This page summarizes the release history. The canonical, generated changelog
+lives in [CHANGELOG.md](https://github.com/elcoosp/sourcier/blob/main/CHANGELOG.md)
+and is produced with git-cliff from the commit history.
+
+## 2.0 (current)
+
+The 2.0 release line focuses on the developer experience around the core
+engine and on a leaner, safer lookup path.
+
+### Added
+
+- The type-state `SourceFilesBuilder`: chaining registration with
+  compile-time phase separation, `add_file_mut` for loops, and
+  `remaining_capacity`.
+- All-or-nothing batch registration with `add_files`.
+- OS-path registration with `add_path` and a dedicated
+  `MapError::PathNotUtf8` for non-UTF-8 paths.
+- The offset bridge: `position_from_offset` and `offset_from_position`
+  convert between byte offsets and packed positions in O(log n) with no
+  allocation.
+- `PositionDisplay` and `display_position` render `path:line:column`
+  diagnostics without allocating.
+- Const constructors and span conversions for positions
+  (`RelativePosition::new` and `from_raw` are `const fn`).
+- A verified open-addressed path index with inline path storage (paths up to
+  30 bytes live inside their entry, with no heap allocation).
+- Exposed line starts accessor and optimized vector initialization in the
+  core engine.
+
+### Changed
+
+- Removed the obsolete `clo`, `fid` and `sfm` modules and restructured the
+  core modules.
+- Enriched crate-level documentation with memory-footprint metrics.
+- The `parallel` feature is forwarded from the facade to the core library.
+
+### Performance
+
+- Finalization improved by 25-35% across benchmark scenarios.
+- Multi-line `view` extractions improved by 70%.
+- The path-to-id index trades ~20% hit latency for byte-exact verification,
+  HashDoS-resistant per-map seeding, zero allocations at finalization and
+  roughly half the lookup-state memory.
+
+### Compatibility
+
+- The 2.0 wire format of `SourceFilesMap` dropped the redundant
+  `path_to_id` table; it is derived from the sorted entries and rebuilt on
+  load.
+- 1.0 payloads that still carry the field deserialize without error and are
+  ignored.
+
+## 0.1.0 (2025-12-19)
+
+First public release:
+
+- `fid`, `sfm` and `sfp` modules for compact `u64` position representation
+  and O(1) path-to-id mapping.
+- `SourceFilesMap` with content storage and `get_content`.
+- `RuntimeFeedback` proof of concept with `with_feedback`.
+- The `view` feature and optional `serde` support.
+
+<Aside type="note">
+        In the repository, the 2.0.0 section currently sits under the Unreleased
+        heading of the generated changelog; the workspace version in Cargo.toml
+        is 2.0.0.
+</Aside>
+
+## Next steps
+
+- Read the full [changelog on GitHub](https://github.com/elcoosp/sourcier/blob/main/CHANGELOG.md).
+- Check <LinkCard title="The two-phase lifecycle" href="/explanation/two-phase-lifecycle/" /> for the design the 2.0 builder formalizes.
+
+
+---
+
+---
+title: Errors
+description: Every MapError and PositionError variant with fields, display strings and the conditions that produce them.
+type: reference
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Both error enums derive `Debug`, `Clone`, `PartialEq` and `Eq`, implement
+`std::error::Error` through `thiserror`, and are `#[non_exhaustive]`: match
+arms outside this crate always contain a catch-all arm.
+
+## `MapError`
+
+Errors produced while building or querying a
+`SourceFilesMap`.
+
+| Variant | Fields | Display string | Produced by |
+| ------- | ------ | -------------- | ----------- |
+| `TooManyFiles` | `max: usize` | `cannot register more than {max} files for this file id type` | `add_file`, `add_files`, `add_path`, `finalize` beyond id capacity (255 for `u8`, 65,535 for `u16`) |
+| `AlreadyFinalized` | — | `the source files map has already been finalized` | `finalize` called twice on a raw map |
+| `Finalized` | — | `cannot modify the source files map after finalization` | `add_file`, `add_files` or `add_path` after finalization |
+| `FileTooLarge` | `size: u64` | `file content of {size} bytes exceeds the 4 GiB line offset limit` | Line-offset construction for a file above `u32::MAX` bytes |
+| `PathNotUtf8` | `path: String` | `path is not valid UTF-8: {path}` | `add_path` with a path that is not valid UTF-8; the field carries the lossy rendering (invalid bytes replaced by `U+FFFD`) |
+
+<Aside type="note">
+	`Finalized` and `AlreadyFinalized` are unrepresentable through
+	`SourceFilesBuilder`: the type-state builder only exposes registration,
+	and `finalize` consumes it. They remain reachable through the raw map.
+</Aside>
+
+## `PositionError`
+
+Errors produced by the checked `try_new` constructors of `AbsolutePosition`
+and `RelativePosition`.
+
+| Variant | Fields | Display string |
+| ------- | ------ | -------------- |
+| `InvalidRange` | `start_line: u16`, `start_col: u8`, `end_line: u16`, `end_col: u8` | `invalid position range: start {start_line}:{start_col} must not come after end {end_line}:{end_col} and all lines and columns must be at least 1` |
+
+`InvalidRange` fires when any of the following fails:
+
+- `start_line >= 1` and `end_line >= 1`
+- `start_col >= 1` and `end_col >= 1`
+- `start_line < end_line`, or `start_line == end_line && start_col <= end_col`
+
+## Results by API
+
+| API | Success | Failure |
+| --- | ------- | ------- |
+| `add_file` / `add_file_mut` | Registers the file | `TooManyFiles` |
+| `add_files` | Registers every file, all-or-nothing | `TooManyFiles`; the map is unchanged on failure |
+| `add_path` | Registers the file | `PathNotUtf8`, `TooManyFiles` |
+| `finalize` | Assigns ids, switches phase | `AlreadyFinalized`, `TooManyFiles` |
+| `LineOffsets::compute` | Builds the index | `FileTooLarge` |
+| `AbsolutePosition::try_new` / `RelativePosition::try_new` | Packs the span | `InvalidRange` |
+| `get_id`, `get_path`, `get_content`, `get`, `view`, `view_str`, `position_from_offset`, `offset_from_position`, `display_position` | `Option` results | No errors — unknown ids, unfinalized maps and unresolvable spans return `None` |
+
+## Next steps
+
+- Follow <LinkCard title="Handling errors" href="/guides/handling-errors/" /> for recovery patterns per variant.
+- Check <LinkCard title="Position encoding" href="/reference/position-encoding/" /> for the limits behind `FileTooLarge` and `TooManyFiles`.
+
+
+---
+
+---
+title: Feature flags
+description: What the serde, view, rt-feedback and parallel Cargo features gate, their defaults and how to trim them.
+type: reference
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+All features are enabled by default and forwarded to the `sourcier-core`
+engine crate. You only configure features on the `sourcier` facade.
+
+| Feature | Default | Gates |
+| ------- | ------- | ----- |
+| `serde` | yes | `Serialize`/`Deserialize` for maps, positions and `FeedbackSnapshot`; wire-format loading |
+| `view` | yes | `LineOffsets`, `view`, `view_str`, `line_offsets`, `position_from_offset`, `offset_from_position`, `display_position` |
+| `rt-feedback` | yes | `RuntimeFeedback`, `FeedbackSnapshot`, `with_feedback` on map and builder |
+| `parallel` | no | Multi-threaded line-offset index construction with `rayon` |
+
+## What each feature means for your build
+
+`serde` adds the serialization derives and the payload-compatibility logic.
+Tools that keep positions only in memory can drop it.
+
+`view` adds the per-file line index (a single `memchr`-accelerated scan, 4
+bytes per line) and every byte-extraction and offset-bridge API. Diagnostics
+tools almost always keep it; pure id registries can drop it.
+
+`rt-feedback` adds atomic counters behind `Arc<RuntimeFeedback>`. No locks
+are taken on the reporting path; the cost when unused is the unused code
+path.
+
+`parallel` is opt-in because on a 2-core reference VM the thread-pool
+overhead outweighed the scan savings. Enable it on many-core build machines
+processing large file sets; it adds the `rayon` dependency.
+
+## Trimming recipes
+
+Keep only byte extraction:
+
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
+
+Keep serialization but no views and no statistics:
+
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["serde"] }`} />
+
+Enable everything including parallelism:
+
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", features = ["parallel"] }`} />
+
+<Aside type="caution">
+	Disabling a feature removes its APIs from the compiled crate: code that
+	calls `view` with `default-features = false` fails to compile. Cargo
+	unifies features across your dependency graph, so another crate in the
+	tree can re-enable a feature you trimmed.
+</Aside>
+
+## MSRV per configuration
+
+The minimum supported Rust version is 1.99 for every feature configuration;
+CI verifies `cargo check` across feature combinations.
+
+## Next steps
+
+- Follow <LinkCard title="Installation" href="/guides/installation/" /> for the install commands behind these snippets.
+- Follow <LinkCard title="Tuning performance" href="/guides/tuning-performance/" /> when deciding between `parallel` and the default scan.
+- Check the <LinkCard title="API surface" href="/reference/api/" /> for the items each feature gates.
+
+
+---
+
+---
+title: Position encoding
+description: Stable u64 bit layouts for AbsolutePosition and RelativePosition, the reserved zero encoding, and wire-format compatibility rules.
+type: reference
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Positions are stable `u64` encodings. The layout is documented so raw values
+can be persisted safely: the layout is part of the public API and stable
+across semver-compatible releases. All fields are packed most significant
+first, and the end line and end column are inclusive.
+
+## Absolute layout
+
+`AbsolutePosition<Id>` packs five fields. The file id always occupies the
+most significant bits, and the remaining fields are laid out so no bits are
+wasted:
+
+| Id type | File id | Start line | Start col | End line | End col |
+| ------- | -------- | ---------- | --------- | -------- | ------- |
+| `u8`    | `56..64` | `40..56`   | `32..40`  | `16..32` | `0..8`  |
+| `u16`   | `48..64` | `32..48`   | `24..32`  | `8..24`  | `0..8`  |
+
+Field widths follow from the ranges: lines are `u16` (16 bits), columns are
+`u8` (8 bits), and the id field is 8 bits for `u8` and 16 bits for `u16`.
+
+Because the fields are ordered from most to least significant, comparing the
+packed values as integers is equivalent to ordering spans lexicographically:
+file id first, then start line, start column, end line, end column.
+
+## Relative layout
+
+`RelativePosition` stores no file id and packs into the low 48 bits:
+
+| Field | Bits |
+| ----- | ---- |
+| Start line | `32..48` |
+| Start col | `24..32` |
+| End line | `8..24` |
+| End col | `0..8` |
+
+The high 16 bits are always zero. `RelativePosition::from_raw` masks them
+away, so values with garbage in the high bits still round-trip losslessly.
+
+## Reserved encodings
+
+Ids are one-based: the first file in a map receives id `1`, and `0` is never
+assigned. This keeps the all-zero encoding reserved for future use as a
+sentinel:
+
+- `AbsolutePosition::from_raw` returns `None` when the embedded file id is
+  `0`, for both id types.
+- `RelativePosition::from_raw` masks the high bits and accepts the all-zero
+  value; use `try_new` if you need range validation on rebuild.
+
+## Limits
+
+| Field | Width | Limit | Exceeding it |
+| ----- | ----- | ----- | ------------ |
+| Files per map (`u8` ids) | 8 bits | 255 files | `MapError::TooManyFiles { max: 255 }` |
+| Files per map (`u16` ids) | 16 bits | 65,535 files | `MapError::TooManyFiles { max: 65535 }` |
+| Line numbers | 16 bits | 65,535 lines | Offset conversion returns `None` |
+| Columns | 8 bits | 255 byte columns | Offset conversion returns `None` |
+| File size for line indexes | 32-bit offsets | 4 GiB | `MapError::FileTooLarge { size }` |
+
+Columns are byte columns, not character columns: a multi-byte UTF-8 character
+counts one column per byte.
+
+## Wire format
+
+With the `serde` feature, `SourceFilesMap` serializes to a payload that
+carries only the raw entries and the phase flag; the lookup state is derived
+from the sorted entries and rebuilt on load. This keeps payloads compact —
+roughly half the 1.0 lookup-state memory.
+
+Backward compatibility:
+
+- 2.0 payloads rebuild the verified path index on load.
+- 1.0 payloads that still carry the redundant `path_to_id` table deserialize
+  without error; the redundant field is ignored.
+
+`AbsolutePosition`, `RelativePosition` and `FeedbackSnapshot` serialize as
+their raw forms with the default `serde` feature, and round trips preserve
+the bits exactly.
+
+<Aside type="caution">
+	Raw `u64` values are safe to persist only within one semver-compatible
+	release line of the encoding. The layout is documented and stable, but a
+	major version may redefine it; re-derive raw values across major
+	upgrades.
+</Aside>
+
+## Next steps
+
+- Follow <LinkCard title="Working with positions" href="/guides/working-with-positions/" /> for construction and conversion recipes.
+- Check <LinkCard title="Errors" href="/reference/errors/" /> for the error variants named in the limits table.
+- Read <LinkCard title="Why Sourcier exists" href="/explanation/why-sourcier/" /> for the reasoning behind packing spans into `u64`s.
+
+
+---
+
+---
+title: Your first source map
+description: Register source files, assign stable ids, pack a span into a single u64 and extract the exact bytes it covers.
+type: tutorial
+---
+
+import { Aside, Code, LinkCard, Steps } from '@astrojs/starlight/components';
+
+This tutorial walks you through the golden path of Sourcier: registering two
+source files, finalizing the map, looking files up by path and id, packing a
+span into a single `u64`, and extracting the exact bytes that span covers.
+You need Rust 1.99 or later and a terminal. The whole tutorial takes about ten
+minutes.
+
+## Prerequisites
+
+- Rust 1.99+ installed through [rustup](https://rustup.rs). Check yours with
+  `rustc --version`.
+- A terminal with `cargo` on your `PATH`.
+
+## Create a demo project
+
+<Steps>
+1. Create a new binary crate and enter it:
+
+	<Code lang="bash" code={`cargo new span-demo
+cd span-demo`} />
+
+2. Add Sourcier as a dependency:
+
+	<Code lang="bash" code={`cargo add sourcier`} />
+
+	Cargo adds the current `2.0` release to `Cargo.toml`.
+
+3. Replace the contents of `src/main.rs` with the code from the next step.
+</Steps>
+
+## Register files and finalize
+
+Sourcier uses a two-phase lifecycle: you register files first, then call
+`finalize()` to sort them, deduplicate registrations and assign stable
+one-based ids.
+
+Add this code to `src/main.rs`:
+
+<Code lang="rust" code={`use sourcier::SourceFilesMap;
+
+fn main() {
+    // u8 ids support up to 255 files; u16 supports 65,535.
+    let mut files = SourceFilesMap::<u8>::new();
+
+    files
+        .add_file("src/main.rs", b"fn main() {\\n    println!(\\"Hello\\");\\n}")
+        .expect("capacity available");
+    files
+        .add_file("src/lib.rs", b"pub mod utils;")
+        .expect("capacity available");
+
+    // Sorts by path, deduplicates, assigns one-based ids.
+    files.finalize().expect("no capacity issue");
+
+    println!("registered {} files", files.len());
+}`} />
+
+Run the program:
+
+<Code lang="bash" code={`cargo run`} />
+
+You see the expected output:
+
+<Code lang="ansi" code={`registered 2 files`} />
+
+<Aside type="note">
+	`add_file` accepts any `impl AsRef<str>` for the path and
+	`impl Into<Vec<u8>>` for the content, so you can pass `&str` paths and
+	either byte slices or owned buffers.
+</Aside>
+
+## Look up files by path and id
+
+After finalization, the map answers queries in constant time. Extend `main`:
+
+<Code lang="rust" code={`// Path to id, and id back to path.
+let id = files.get_id("src/main.rs").expect("file present");
+assert_eq!(files.get_path(id), Some("src/main.rs"));
+
+// Ids are assigned in sorted path order, starting at 1.
+assert_eq!(id, 1);
+
+// Id to full borrowed entry.
+let entry = files.get(id).expect("file present");
+assert_eq!(entry.path, "src/main.rs");
+assert!(entry.content.starts_with(b"fn main"));`} />
+
+`src/lib.rs` sorts before `src/main.rs`, so it receives id `1` and
+`src/main.rs` receives id `2`. Sorted ids are stable: the same set of files
+always produces the same ids, which makes them safe to persist.
+
+## Pack a span into a u64
+
+`AbsolutePosition` packs five fields — file id, start line, start column, end
+line and end column — into one `u64`. Lines and columns are one-based and the
+end is inclusive:
+
+<Code lang="rust" code={`use sourcier::{AbsolutePosition, SourceFilePosition};
+
+let pos = AbsolutePosition::new(id, 2, 5, 2, 22);
+
+assert_eq!(pos.file_id(), id);
+assert_eq!(pos.start_line(), 2);
+assert_eq!(pos.start_column(), 5);
+assert_eq!(pos.end_line(), 2);
+assert_eq!(pos.end_column(), 22);`} />
+
+`AbsolutePosition::new` is infallible and zero-cost: values are encoded as-is.
+Use `try_new` when you want the span validated as a well-formed, one-based
+region:
+
+<Code lang="rust" code={`assert!(AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1).is_err());
+assert!(AbsolutePosition::<u8>::try_new(1, 1, 1, 1, 1).is_ok());`} />
+
+## Extract the exact bytes of the span
+
+With the default `view` feature, the map bridges positions back to the bytes
+they cover:
+
+<Code lang="rust" code={`assert_eq!(
+    files.view(id, &pos),
+    Some(&b"println!(\\"Hello\\");"[..])
+);`} />
+
+`view` returns the bytes of the span including any line terminators it
+covers. For UTF-8 source you can use `view_str`, which returns `&str` and
+yields `None` when the span cuts a multi-byte character.
+
+Your program now registers files, looks them up, packs positions and extracts
+source bytes. Print the extracted view at the end of `main` to see it in
+action:
+
+<Code lang="rust" code={`if let Some(bytes) = files.view(id, &pos) {
+    println!("{}", String::from_utf8_lossy(bytes));
+}`} />
+
+<Code lang="ansi" code={`println!("Hello");`} />
+
+## Next steps
+
+You completed the golden path. From here:
+
+- Follow <LinkCard title="Registering source files" href="/guides/registering-files/" /> for loops, batches, `PathBuf` registration and duplicate handling.
+- Follow <LinkCard title="Working with positions" href="/guides/working-with-positions/" /> for conversions, ordering and serialization.
+- Browse the <LinkCard title="API surface" href="/reference/api/" /> for the complete method list.

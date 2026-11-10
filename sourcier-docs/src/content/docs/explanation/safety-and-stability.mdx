@@ -4,7 +4,7 @@ description: How Sourcier forbids unsafe code, seals its traits, keeps error enu
 type: explanation
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 Sourcier makes promises that tools can build on: no unsafe code, a stable
 and semver-checked API, and behavior pinned by property, snapshot and
@@ -68,15 +68,13 @@ committed; regenerate them after an intentional change with
 
 CI runs the full gate:
 
-```bash
-cargo test --workspace --all-features      # unit, integration, property, doc tests
+<Code lang="bash" code={`cargo test --workspace --all-features      # unit, integration, property, doc tests
 cargo nextest run --workspace --all-features
 cargo llvm-cov --workspace --all-features --summary-only
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
-cargo deny check                           # licenses, advisories, bans, sources
-```
+cargo deny check                           # licenses, advisories, bans, sources`} />
 
 Coverage measured with `cargo-llvm-cov` reports 100% of functions covered;
 `llvm-cov show` confirms every line and every reachable region executes. The

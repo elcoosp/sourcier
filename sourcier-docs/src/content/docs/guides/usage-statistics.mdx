@@ -4,7 +4,7 @@ description: Observe finalization activity across maps and threads with the lock
 type: how-to
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 Use this guide to collect usage statistics when your tool builds many source
 file maps. Everything on this page requires the default `rt-feedback`
@@ -16,8 +16,7 @@ context without blocking.
 
 Create one `RuntimeFeedback`, wrap it in an `Arc` and hand it to the map:
 
-```rust
-use std::sync::Arc;
+<Code lang="rust" code={`use std::sync::Arc;
 
 use sourcier::{RuntimeFeedback, SourceFilesMap};
 
@@ -25,8 +24,7 @@ let feedback = Arc::new(RuntimeFeedback::new());
 
 let mut files = SourceFilesMap::<u8>::with_feedback(Arc::clone(&feedback));
 files.add_file("a.rs", b"fn a() {}").expect("capacity available");
-files.finalize().expect("no capacity issue");
-```
+files.finalize().expect("no capacity issue");`} />
 
 Builders accept the same context through
 `SourceFilesBuilder::with_feedback`.
@@ -35,14 +33,12 @@ Builders accept the same context through
 
 `snapshot` returns an immutable, `Copy` snapshot of the counters:
 
-```rust
-let snapshot = feedback.snapshot();
+<Code lang="rust" code={`let snapshot = feedback.snapshot();
 
 assert_eq!(snapshot.total_files, 1);
 assert_eq!(snapshot.total_bytes, 9);
 assert_eq!(snapshot.max_file_size, 9);
-assert_eq!(snapshot.usage_count, 1);
-```
+assert_eq!(snapshot.usage_count, 1);`} />
 
 The snapshot fields:
 
@@ -66,32 +62,30 @@ The reporting path takes no locks, so threads only contend on atomic
 instructions. Share the `Arc` across workers and read the counters whenever
 you need them:
 
-```rust
-use std::sync::Arc;
+<Code lang="rust" code={`use std::sync::Arc;
 
 use sourcier::{RuntimeFeedback, SourceFilesBuilder};
 
 let feedback = Arc::new(RuntimeFeedback::new());
 
 let handles: Vec<_> = (0..4)
-	.map(|i| {
-		let feedback = Arc::clone(&feedback);
-		std::thread::spawn(move || {
-			let mut files = SourceFilesBuilder::<u8>::with_feedback(feedback);
-			files
-				.add_file(format!("{i}.rs"), b"fn x() {}")
-				.expect("capacity available");
-			files.finalize().expect("no capacity issue");
-		})
-	})
-	.collect();
+    .map(|i| {
+        let feedback = Arc::clone(&feedback);
+        std::thread::spawn(move || {
+            let mut files = SourceFilesBuilder::<u8>::with_feedback(feedback);
+            files
+                .add_file(format!("{i}.rs"), b"fn x() {}")
+                .expect("capacity available");
+            files.finalize().expect("no capacity issue");
+        })
+    })
+    .collect();
 
 for handle in handles {
-	handle.join().expect("worker finished");
+    handle.join().expect("worker finished");
 }
 
-assert_eq!(feedback.snapshot().usage_count, 4);
-```
+assert_eq!(feedback.snapshot().usage_count, 4);`} />
 
 With the default `serde` feature, `FeedbackSnapshot` also implements
 `Serialize` and `Deserialize`, so you can log or persist snapshots directly.
