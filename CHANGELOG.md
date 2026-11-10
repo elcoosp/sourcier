@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Write strict content collection schemes (docs) by @elcoosp
 - Assemble customized error layout framework (docs) by @elcoosp
 - Per-page OG images via astro-takumi fork (linkedom backend) (og) by @elcoosp
+- Adopt @elcoosp/docs-toolkit — remove per-project OG boilerplate (og) by @elcoosp
 
 ### Changed
 - Remove obsolete clo module (core) by @elcoosp
@@ -101,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update changelog by @github-actions[bot]
 - Add qa-components.mjs (scripts) by @elcoosp
 - Add bootstrap-artifacts.mjs (scripts) by @elcoosp
+- Update changelog by @github-actions[bot]
 
 ### Other
 - Docs + frontmatter YAML quoting fixes by @elcoosp
