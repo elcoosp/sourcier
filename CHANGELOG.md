@@ -103,6 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add qa-components.mjs (scripts) by @elcoosp
 - Add bootstrap-artifacts.mjs (scripts) by @elcoosp
 - Update changelog by @github-actions[bot]
+- Update changelog by @github-actions[bot]
 
 ### Other
 - Docs + frontmatter YAML quoting fixes by @elcoosp
