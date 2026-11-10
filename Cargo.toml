@@ -35,35 +35,21 @@ missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 must_use_candidate = "allow"
 
-[package]
-name = "sourcier"
-description = "Compact and efficient source file mapping and position tracking"
-readme = "README.md"
-keywords = [lib]
-path = "src/lib.rs"
-
-[lib]
-path = "src/lib.rs"
-
 ["source-map", "position", "compiler", "diagnostics", "lsp"]
 categories = ["development-tools", "parsing", "data-structures"]
-version = "2.0.0"
-edition = "2024"
-rust-version = "1.99"
-license = "MIT"
-repository = "https://github.com/elcoosp/sourcier"
-homepage = "https://github.com/elcoosp/sourcier"
-authors = ["elcoosp"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
 
-[features]
-default = ["serde", "view", "rt-feedback"]
+["serde", "view", "rt-feedback"]
 serde = ["sourcier-core/serde"]
 view = ["sourcier-core/view"]
 rt-feedback = ["sourcier-core/rt-feedback"]
 parallel = ["sourcier-core/parallel"]
 
-[dependencies]
-sourcier-core = { path = "sourcier-core", version = "2.0.0" }
-
 [lints]
-workspace = false
+workspace = true

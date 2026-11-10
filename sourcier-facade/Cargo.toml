@@ -1,0 +1,11 @@
+[package]
+name = "sourcier"
+description = "Compact and efficient source file mapping and position tracking"
+readme = "README.md"
+keywords = 
+[dependencies]
+sourcier-core = { path = "sourcier-core", version = "2.0.0" }
+
+
+[features]
+default = 
