@@ -4,13 +4,13 @@ description = "Core implementation of compact source file mapping and position t
 readme = "README.md"
 keywords = ["source-map", "position", "compiler", "diagnostics", "lsp"]
 categories = ["development-tools", "parsing", "data-structures"]
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-license.workspace = true
-repository.workspace = true
-homepage.workspace = true
-authors.workspace = true
+version = "2.0.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+repository = "https://github.com/elcoosp/sourcier"
+homepage = "https://github.com/elcoosp/sourcier"
+authors = ["elcoosp"]
 
 [features]
 rt-feedback = []
@@ -20,20 +20,20 @@ parallel = ["dep:rayon"]
 default = ["serde", "view", "rt-feedback"]
 
 [dependencies]
-memchr = { workspace = true }
-rayon = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
-thiserror = { workspace = true }
+memchr = "2.7"
+rayon = { version = "1.10", optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
+thiserror = "2.0"
 
 [dev-dependencies]
-insta = { workspace = true }
-proptest = { workspace = true }
+insta = { version = "1.43", features = ["yaml", "redactions"] }
+proptest = "1.9"
 criterion = { version = "0.8", features = ["html_reports"] }
-serde_json = { workspace = true }
+serde_json = "1.0"
 
 [[bench]]
 name = "map"
 harness = false
 
 [lints]
-workspace = true
+workspace = false
