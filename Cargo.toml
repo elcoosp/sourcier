@@ -42,6 +42,9 @@ readme = "README.md"
 keywords = [lib]
 path = "src/lib.rs"
 
+[lib]
+path = "src/lib.rs"
+
 ["source-map", "position", "compiler", "diagnostics", "lsp"]
 categories = ["development-tools", "parsing", "data-structures"]
 version = "2.0.0"
