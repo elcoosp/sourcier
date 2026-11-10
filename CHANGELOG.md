@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scaffold starlight documentation site configuration (docs) by @elcoosp
 - Write strict content collection schemes (docs) by @elcoosp
 - Assemble customized error layout framework (docs) by @elcoosp
+- Per-page OG images via astro-takumi fork (linkedom backend) (og) by @elcoosp
 
 ### Changed
 - Remove obsolete clo module (core) by @elcoosp
@@ -97,6 +98,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configure workspace package exemptions (docs) by @elcoosp
 - Expose user-agent mapping rules (docs) by @elcoosp
 - More docs by @elcoosp
+- Update changelog by @github-actions[bot]
+- Add qa-components.mjs (scripts) by @elcoosp
+- Add bootstrap-artifacts.mjs (scripts) by @elcoosp
+
+### Other
+- Docs + frontmatter YAML quoting fixes by @elcoosp
 
 ### Performance
 - Add misses testing tracks and line-col navigation benchmarks (core) by @elcoosp
