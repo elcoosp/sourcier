@@ -30,7 +30,7 @@
     "playwright": "^1.65.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "@elcoosp/docs-toolkit": "github:elcoosp/docs-toolkit#8084231ffe3841ce1f199644aeb0c0af71b137bb"
   },
   "pnpm": {
