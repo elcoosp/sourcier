@@ -106,6 +106,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update changelog by @github-actions[bot]
 - Update changelog by @github-actions[bot]
 - Update changelog by @github-actions[bot]
+- Update changelog by @github-actions[bot]
+- Bump to 0.2.3 — TechArticle restored, home breadcrumb skip (toolkit) by @elcoosp
 
 ### Other
 - Docs + frontmatter YAML quoting fixes by @elcoosp
