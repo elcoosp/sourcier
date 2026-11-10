@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Per-page OG images via astro-takumi fork (linkedom backend) (og) by @elcoosp
 - Adopt @elcoosp/docs-toolkit — remove per-project OG boilerplate (og) by @elcoosp
 - JSON-LD + 404 card + robots.txt + .qa gitignore (toolkit 0.2.1) (og) by @elcoosp
+- Bigger logo (160) + name (52) via toolkit 0.3.0 (og) by @elcoosp
 
 ### Changed
 - Remove obsolete clo module (core) by @elcoosp
@@ -108,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update changelog by @github-actions[bot]
 - Update changelog by @github-actions[bot]
 - Bump to 0.2.3 — TechArticle restored, home breadcrumb skip (toolkit) by @elcoosp
+- Update changelog by @github-actions[bot]
 
 ### Other
 - Docs + frontmatter YAML quoting fixes by @elcoosp
