@@ -36,4 +36,4 @@ name = "map"
 harness = false
 
 [lints]
-workspace = false
+workspace = true
