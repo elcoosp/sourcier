@@ -230,6 +230,7 @@ fn builder_registers_path_types() {
 #[test]
 fn builder_reports_invalid_utf8_paths_without_registering() {
     use std::ffi::OsStr;
+    #[cfg(unix)]
     use std::os::unix::ffi::OsStrExt;
 
     let mut builder = SourceFilesBuilder::<u8>::new();

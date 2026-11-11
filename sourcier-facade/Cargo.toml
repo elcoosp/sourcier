@@ -22,7 +22,7 @@ rt-feedback = []
 parallel = ["sourcier-core/parallel"]
 
 [dependencies]
-sourcier-core = { path = "../sourcier-core" }
+sourcier-core = { path = "../sourcier-core", version = "2.0.0" }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 
