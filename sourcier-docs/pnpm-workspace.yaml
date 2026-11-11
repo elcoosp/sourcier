@@ -19,7 +19,7 @@ minimumReleaseAgeExclude:
 - '@volar/typescript@2.4.31'
 - satteri@0.11.7
 allowBuilds:
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/ac684a44763db62ceb30ca70e89e430d9cc04049': true
+  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/366fd96a041b8a5d342913af9c35a1f00d2834eb': true
 
   esbuild: true
   sharp: true
