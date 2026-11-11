@@ -31,15 +31,6 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "typescript": "6.0.3",
-    "@elcoosp/docs-toolkit": "github:elcoosp/docs-toolkit#b284ff4d0f4d644320c074406386e84dc699347e"
-  },
-  "pnpm": {
-    "overrides": {
-      "@emnapi/runtime": "1.11.3"
-    },
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "sharp"
-    ]
+    "@elcoosp/docs-toolkit": "github:elcoosp/docs-toolkit#ac684a44763db62ceb30ca70e89e430d9cc04049"
   }
 }
