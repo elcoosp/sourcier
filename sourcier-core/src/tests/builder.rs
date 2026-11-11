@@ -2,6 +2,7 @@
 //! build-phase companion that makes premature queries unrepresentable, plus
 //! the atomic batch registration shared with the map.
 
+#[cfg(feature = "rt-feedback")]
 use crate::feedback::RuntimeFeedback;
 use crate::{AbsolutePosition, MapError, SourceFilesBuilder, SourceFilesMap};
 use std::sync::Arc;
