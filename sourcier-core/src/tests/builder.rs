@@ -228,6 +228,7 @@ fn builder_registers_path_types() {
 }
 
 #[test]
+#[cfg(unix)]
 fn builder_reports_invalid_utf8_paths_without_registering() {
     use std::ffi::OsStr;
     #[cfg(unix)]

@@ -202,6 +202,7 @@ fn add_path_accepts_path_types() {
 }
 
 #[test]
+#[cfg(unix)]
 fn add_path_reports_invalid_utf8_without_registering() {
     use std::ffi::OsStr;
     #[cfg(unix)]
