@@ -1,3 +1,4 @@
+use crate::traits::SourceFilePosition;
 //! The source file registry: paths, contents and stable numeric ids.
 //!
 //! [`SourceFilesMap`] collects files in a build phase and, once
