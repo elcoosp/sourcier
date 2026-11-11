@@ -6,6 +6,7 @@ import starlightLlmsTxt from "starlight-llms-txt";
 
 
 export default await defineDocsConfig({
+  changelog: { repo: 'elcoosp/sourcier' },
   site: 'https://sourcier.vercel.app',
   domain: 'sourcier.vercel.app',
   title: "Sourcier",

@@ -19,6 +19,7 @@ minimumReleaseAgeExclude:
 - '@volar/typescript@2.4.31'
 - satteri@0.11.7
 allowBuilds:
+  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/b284ff4d0f4d644320c074406386e84dc699347e': true
   esbuild: true
   sharp: true
   astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e: true
