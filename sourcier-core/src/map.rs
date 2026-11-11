@@ -32,8 +32,9 @@ use std::sync::Arc;
 use crate::feedback::RuntimeFeedback;
 #[cfg(feature = "view")]
 use crate::line_map::LineOffsets;
+use crate::position::SourceFilePosition;
 #[cfg(feature = "view")]
-use crate::position::{AbsolutePosition, SourceFilePosition};
+use crate::position::AbsolutePosition;
 
 /// A borrowed view of one registered file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
