@@ -31,7 +31,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "typescript": "6.0.3",
-    "@elcoosp/docs-toolkit": "github:elcoosp/docs-toolkit#b284ff4d0f4d644320c074406386e84dc699347e"
+    "@elcoosp/docs-toolkit": "github:elcoosp/docs-toolkit#0a527ea6c8a24096982b9d6df829ab1c8bdb04d5"
   },
   "pnpm": {
     "overrides": {
