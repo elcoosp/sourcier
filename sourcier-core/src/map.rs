@@ -1,4 +1,3 @@
-use crate::traits::SourceFilePosition;
 //! The source file registry: paths, contents and stable numeric ids.
 //!
 //! [`SourceFilesMap`] collects files in a build phase and, once
@@ -20,6 +19,7 @@ use crate::traits::SourceFilePosition;
 //!   adversarial collision patterns (`HashDoS`) from being precomputed.
 //! - Per-file [`LineOffsets`] live in a dense vector indexed by id, avoiding
 //!   a hash lookup on every `view` call.
+use crate::traits::SourceFilePosition;
 
 use crate::error::MapError;
 use crate::file_id::FileId;
