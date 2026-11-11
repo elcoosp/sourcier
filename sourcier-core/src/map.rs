@@ -19,7 +19,7 @@
 //!   adversarial collision patterns (`HashDoS`) from being precomputed.
 //! - Per-file [`LineOffsets`] live in a dense vector indexed by id, avoiding
 //!   a hash lookup on every `view` call.
-use crate::traits::SourceFilePosition;
+use crate::position::SourceFilePosition;
 
 use crate::error::MapError;
 use crate::file_id::FileId;
