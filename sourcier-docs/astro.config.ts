@@ -24,7 +24,7 @@ export default await defineDocsConfig({
 			social: [
 				{
 					icon: "github",
-					label: "GitHub",
+					label: "GitHub", translations: { fr: "GitHub" },
 					href: "https://github.com/elcoosp/sourcier"
 				},
 			],
@@ -47,14 +47,14 @@ export default await defineDocsConfig({
 			],
 			sidebar: [
 				{
-					label: "Introduction",
+					label: "Introduction", translations: { fr: "Introduction" },
 					items: [{ label: "Overview", translations: { fr: 'Aperçu' }, link: "/" }]
 				},
 				{
 					label: "Tutorials", translations: { fr: 'Tutoriels' },
 					items: [
 						{
-							label: "Your first source map",
+							label: "Your first source map", translations: { fr: "Votre première carte source" },
 							link: "/tutorials/getting-started/"
 						},
 					]
@@ -64,24 +64,24 @@ export default await defineDocsConfig({
 					items: [
 						{ label: "Installation", translations: { fr: "Installation" }, link: "/guides/installation/" },
 						{
-							label: "Registering source files",
+							label: "Registering source files", translations: { fr: "Enregistrement des fichiers sources" },
 							link: "/guides/registering-files/"
 						},
 						{
-							label: "Working with positions",
+							label: "Working with positions", translations: { fr: "Travailler avec les positions" },
 							link: "/guides/working-with-positions/"
 						},
 						{
-							label: "Views and navigation",
+							label: "Views and navigation", translations: { fr: "Vues et navigation" },
 							link: "/guides/navigating-source/"
 						},
 						{
-							label: "Sharing usage statistics",
+							label: "Sharing usage statistics", translations: { fr: "Partage des statistiques d'utilisation" },
 							link: "/guides/usage-statistics/"
 						},
-						{ label: "Handling errors", link: "/guides/handling-errors/" },
+						{ label: "Handling errors", translations: { fr: "Gestion des erreurs" }, link: "/guides/handling-errors/" },
 						{
-							label: "Tuning performance",
+							label: "Tuning performance", translations: { fr: "Réglage des performances" },
 							link: "/guides/tuning-performance/"
 						},
 					]
@@ -89,13 +89,13 @@ export default await defineDocsConfig({
 				{
 					label: "Reference", translations: { fr: 'Référence' },
 					items: [
-						{ label: "API surface", link: "/reference/api/" },
+						{ label: "API surface", translations: { fr: "Surface de l'API" }, link: "/reference/api/" },
 						{
-							label: "Position encoding",
+							label: "Position encoding", translations: { fr: "Encodage de position" },
 							link: "/reference/position-encoding/"
 						},
-						{ label: "Feature flags", link: "/reference/feature-flags/" },
-						{ label: "Errors", link: "/reference/errors/" },
+						{ label: "Feature flags", translations: { fr: "Drapeaux de fonctionnalités" }, link: "/reference/feature-flags/" },
+						{ label: "Errors", translations: { fr: "Erreurs" }, link: "/reference/errors/" },
 						{ label: "Changelog", translations: { fr: 'Journal des modifications' }, link: "/reference/changelog/" },
 					]
 				},
@@ -103,19 +103,19 @@ export default await defineDocsConfig({
 					label: "Explanation", translations: { fr: 'Explication' },
 					items: [
 						{
-							label: "Why Sourcier exists",
+							label: "Why Sourcier exists", translations: { fr: "Pourquoi Sourcier existe" },
 							link: "/explanation/why-sourcier/"
 						},
 						{
-							label: "The two-phase lifecycle",
+							label: "The two-phase lifecycle", translations: { fr: "Le cycle de vie en deux phases" },
 							link: "/explanation/two-phase-lifecycle/"
 						},
 						{
-							label: "Performance design",
+							label: "Performance design", translations: { fr: "Conception des performances" },
 							link: "/explanation/performance-design/"
 						},
 						{
-							label: "Safety and stability",
+							label: "Safety and stability", translations: { fr: "Sécurité et stabilité" },
 							link: "/explanation/safety-and-stability/"
 						},
 					]
