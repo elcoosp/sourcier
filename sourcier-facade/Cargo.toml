@@ -1,4 +1,6 @@
 [package]
+documentation = "https://sourcier.vercel.app"
+
 name = "sourcier"
 description = "Compact and efficient source file mapping and position tracking"
 readme = "../README.md"

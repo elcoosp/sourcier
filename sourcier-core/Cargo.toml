@@ -1,4 +1,6 @@
 [package]
+documentation = "https://sourcier.vercel.app"
+
 name = "sourcier-core"
 description = "Core implementation of compact source file mapping and position tracking"
 readme = "README.md"
