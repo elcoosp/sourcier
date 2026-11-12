@@ -2,7 +2,7 @@
 name = "sourcier"
 description = "Compact and efficient source file mapping and position tracking"
 readme = "../README.md"
-keywords = ["source-map", "position", "compiler", "diagnostics", "lsp"]
+keywords = ["parser", "ast", "source", "syntax", "codegen"]
 categories = ["development-tools", "parsing", "data-structures"]
 version.workspace = true
 edition.workspace = true

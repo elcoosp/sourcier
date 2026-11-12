@@ -2,7 +2,7 @@
 name = "sourcier-core"
 description = "Core implementation of compact source file mapping and position tracking"
 readme = "README.md"
-keywords = ["source-map", "position", "compiler", "diagnostics", "lsp"]
+keywords = ["parser", "ast", "source", "syntax", "codegen"]
 categories = ["development-tools", "parsing", "data-structures"]
 version = "2.0.0"
 edition = "2024"
