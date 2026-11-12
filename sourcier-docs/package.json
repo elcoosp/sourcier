@@ -22,7 +22,7 @@
     "starlight-llms-txt": "^0.12.0",
     "linkedom": "^0.18.0",
     "mermaid": "^11.0.0",
-    "@elcoosp/docs-toolkit": "file:../../docs-toolkit",
+    "@elcoosp/docs-toolkit": "^0.5.17",
     "starlight-changelogs": "^0.7.1"
   },
   "devDependencies": {
@@ -35,7 +35,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "typescript": "6.0.3",
-    "@elcoosp/docs-toolkit": "file:../../docs-toolkit",
+    "@elcoosp/docs-toolkit": "^0.5.17",
     "tsx": "^4.19.2"
   }
 }
