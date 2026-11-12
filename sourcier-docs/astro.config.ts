@@ -48,10 +48,10 @@ export default await defineDocsConfig({
 			sidebar: [
 				{
 					label: "Introduction",
-					items: [{ label: "Overview", link: "/" }]
+					items: [{ label: "Overview", translations: { fr: 'Aperçu' }, link: "/" }]
 				},
 				{
-					label: "Tutorials",
+					label: "Tutorials", translations: { fr: 'Tutoriels' },
 					items: [
 						{
 							label: "Your first source map",
@@ -60,7 +60,7 @@ export default await defineDocsConfig({
 					]
 				},
 				{
-					label: "How-to guides",
+					label: "How-to guides", translations: { fr: 'Guides pratiques' },
 					items: [
 						{ label: "Installation", link: "/guides/installation/" },
 						{
@@ -87,7 +87,7 @@ export default await defineDocsConfig({
 					]
 				},
 				{
-					label: "Reference",
+					label: "Reference", translations: { fr: 'Référence' },
 					items: [
 						{ label: "API surface", link: "/reference/api/" },
 						{
@@ -96,11 +96,11 @@ export default await defineDocsConfig({
 						},
 						{ label: "Feature flags", link: "/reference/feature-flags/" },
 						{ label: "Errors", link: "/reference/errors/" },
-						{ label: "Changelog", link: "/reference/changelog/" },
+						{ label: "Changelog", translations: { fr: 'Journal des modifications' }, link: "/reference/changelog/" },
 					]
 				},
 				{
-					label: "Explanation",
+					label: "Explanation", translations: { fr: 'Explication' },
 					items: [
 						{
 							label: "Why Sourcier exists",
