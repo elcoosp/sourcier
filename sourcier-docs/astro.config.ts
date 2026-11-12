@@ -62,7 +62,7 @@ export default await defineDocsConfig({
 				{
 					label: "How-to guides", translations: { fr: 'Guides pratiques' },
 					items: [
-						{ label: "Installation", link: "/guides/installation/" },
+						{ label: "Installation", translations: { fr: "Installation" }, link: "/guides/installation/" },
 						{
 							label: "Registering source files",
 							link: "/guides/registering-files/"
