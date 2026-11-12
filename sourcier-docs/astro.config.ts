@@ -4,7 +4,6 @@ import starlightImageZoom from "starlight-image-zoom";
 import starlightHeadingBadges from "starlight-heading-badges";
 import starlightLlmsTxt from "starlight-llms-txt";
 
-
 export default await defineDocsConfig({
   llmsTxt: {},
   changelog: { repo: 'elcoosp/sourcier' },
@@ -17,7 +16,6 @@ export default await defineDocsConfig({
 			title: "Sourcier",
 			description:
 				"Compact and efficient source file mapping and position tracking for Rust: register files once, pack every span into a single u64.",
-
 
 			expressiveCode: {
 				themes: ['github-light', 'github-dark']
@@ -36,13 +34,7 @@ export default await defineDocsConfig({
 			},
 			// Single-locale site: the root locale avoids an i18n
 			// UI-translation collection, which this site does not need.
-			locales: {
-				root: {
-					label: "English",
-					lang: "en"
-				}
-			},
-			defaultLocale: "root",
+
 			plugins: [
 				// Fails the build on broken internal links — release blocker.
 				starlightLinksValidator(),
