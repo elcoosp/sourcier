@@ -1,4 +1,5 @@
 import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
+import starlightChangelogs from 'starlight-changelogs';
 import starlightLinksValidator from "starlight-links-validator";
 import starlightImageZoom from "starlight-image-zoom";
 import starlightHeadingBadges from "starlight-heading-badges";
@@ -35,7 +36,7 @@ export default await defineDocsConfig({
 			// Single-locale site: the root locale avoids an i18n
 			// UI-translation collection, which this site does not need.
 
-			plugins: [
+			plugins: [ starlightChangelogs(), 
 				// Fails the build on broken internal links — release blocker.
 				starlightLinksValidator(),
 				// Click-to-zoom for documentation images.
