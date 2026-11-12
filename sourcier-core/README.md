@@ -16,4 +16,4 @@ See the [workspace README](https://github.com/elcoosp/sourcier) and the
 [docs.rs documentation](https://docs.rs/sourcier) for the full guide,
 feature flags and performance notes.
 
-Licensed under the [MIT license](../LICENSE-MIT).
+Licensed under the MIT license.
