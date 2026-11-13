@@ -45,10 +45,10 @@ export default await defineDocsConfig({
 			sidebar: [
 				{
 					label: "Introduction", translations: { fr: "Introduction" },
-					items: [{ label: "Overview", translations: { fr: 'Aperçu' }, link: "/" }]
+					items: [{ label: "Overview", link: "/" }]
 				},
 				{
-					label: "Tutorials", translations: { fr: 'Tutoriels' },
+					label: "Tutorials",
 					items: [
 						{
 							label: "Your first source map", translations: { fr: "Votre première carte source" },
@@ -57,9 +57,9 @@ export default await defineDocsConfig({
 					]
 				},
 				{
-					label: "How-to guides", translations: { fr: 'Guides pratiques' },
+					label: "How-to guides",
 					items: [
-						{ label: "Installation", translations: { fr: "Installation" }, link: "/guides/installation/" },
+						{ label: "Installation", link: "/guides/installation/" },
 						{
 							label: "Registering source files", translations: { fr: "Enregistrement des fichiers sources" },
 							link: "/guides/registering-files/"
@@ -84,20 +84,20 @@ export default await defineDocsConfig({
 					]
 				},
 				{
-					label: "Reference", translations: { fr: 'Référence' },
+					label: "Reference",
 					items: [
 						{ label: "API surface", translations: { fr: "Surface de l'API" }, link: "/reference/api/" },
 						{
 							label: "Position encoding", translations: { fr: "Encodage de position" },
 							link: "/reference/position-encoding/"
 						},
-						{ label: "Feature flags", translations: { fr: "Drapeaux de fonctionnalités" }, link: "/reference/feature-flags/" },
-						{ label: "Errors", translations: { fr: "Erreurs" }, link: "/reference/errors/" },
-						{ label: "Changelog", translations: { fr: 'Journal des modifications' }, link: "/reference/changelog/" },
+						{ label: "Feature flags", link: "/reference/feature-flags/" },
+						{ label: "Errors", link: "/reference/errors/" },
+						{ label: "Changelog", link: "/reference/changelog/" },
 					]
 				},
 				{
-					label: "Explanation", translations: { fr: 'Explication' },
+					label: "Explanation",
 					items: [
 						{
 							label: "Why Sourcier exists", translations: { fr: "Pourquoi Sourcier existe" },
