@@ -36,7 +36,7 @@
     "@astrojs/check": "0.9.12",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "markdownlint-cli2": "0.24.0",
+    "markdownlint-cli2": "0.24.1",
     "playwright": "^1.65.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
