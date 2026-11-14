@@ -1,0 +1,112 @@
+---
+title: Enregistrer des fichiers source
+description: "Enregistrez des fichiers individuels, des boucles, des lots tout-ou-rien et des chemins OS ; contrôlez la capacité et résolvez les enregistrements en double."
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Utilisez ce guide pour choisir la bonne API d'enregistrement selon votre situation et pour prédire comment Sourcier résout les doublons et la capacité. L'enregistrement se produit dans la phase de construction ; la finalisation trie ensuite les entrées par chemin et assigne des ids stables à base un.
+
+## Enregistrer un seul fichier
+
+`add_file` accepte n'importe quel chemin qui se convertit en `&str` et n'importe quel contenu qui se convertit en `Vec<u8>` :
+
+<Code lang="rust" code={`use sourcier::SourceFilesMap;
+
+let mut files = SourceFilesMap::<u8>::new();
+files
+    .add_file("src/main.rs", b"fn main() {}")
+    .expect("capacity available");`} />
+
+Le seul échec possible est un type d'id épuisé (`MapError::TooManyFiles`).
+
+## Enregistrer dans une boucle
+
+`add_file` consomme et renvoie la map ou le builder pour chaîner. Dans une boucle, préférez la variante mutante `add_file_mut`, qui garde la valeur en place après une erreur :
+
+<Code lang="rust" code={`use sourcier::{SourceFilesBuilder, SourceFilesMap};
+
+fn collect(names: &[&str]) -> SourceFilesMap<u16> {
+    let mut builder = SourceFilesBuilder::<u16>::with_capacity(names.len());
+    for name in names {
+        builder
+            .add_file_mut(format!("src/{name}.rs"), format!("// {name}"))
+            .expect("u16 capacity");
+    }
+    builder.finalize().expect("no capacity issue")
+}`} />
+
+`with_capacity` pré-réserve le stockage pour le nombre attendu de fichiers et réduit les réallocations pendant la construction.
+
+## Enregistrer un lot tout-ou-rien
+
+`add_files` enregistre un itérateur de paires `(path, content)` et laisse la map ou le builder exactement comme il était quand une paire échoue :
+
+<Code lang="rust" code={`use sourcier::SourceFilesMap;
+
+let mut files = SourceFilesMap::<u8>::new();
+let batch = vec![
+    ("a.rs", &b"fn a() {}"[..]),
+    ("b.rs", &b"fn b() {}"[..]),
+];
+
+files.add_files(batch).expect("capacity available");
+files.finalize().expect("no capacity issue");
+assert_eq!(files.len(), 2);`} />
+
+Parce que le lot est atomique, un échec en cours de route ne peut pas laisser un ensemble partiellement enregistré derrière.
+
+## Enregistrer des chemins OS
+
+Les outils qui tiennent des valeurs `Path`/`PathBuf` enregistrent via `add_path`. Les chemins sont stockés comme `str`, donc un chemin portant des octets qui ne sont pas de l'UTF-8 valide échoue avec `MapError::PathNotUtf8`, qui porte le rendu avec perte du chemin pour les diagnostics :
+
+<Code lang="rust" code={`use sourcier::{MapError, SourceFilesBuilder};
+use std::path::PathBuf;
+
+let files = SourceFilesBuilder::<u8>::new()
+    .add_path(PathBuf::from("src/main.rs"), b"fn main() {}")
+    .expect("utf-8 path")
+    .finalize()
+    .expect("no capacity issue");
+
+assert_eq!(files.get_id("src/main.rs"), Some(1));`} />
+
+<Aside type="caution">
+	Les chemins non-UTF-8 ne peuvent pas être enregistrés sans perte. Convertissez-les à la frontière de votre outil et rapportez `MapError::PathNotUtf8` avec son champ `path` à l'utilisateur.
+</Aside>
+
+## Gérer les chemins en double
+
+Vous pouvez enregistrer le même chemin autant de fois que vous voulez. Les doublons sont résolus pendant `finalize` : le premier enregistrement d'un chemin gagne, les suivants sont abandonnés, et la résolution tient même à l'échelle de centaines de doublons (testé par propriétés) :
+
+<Code lang="rust" code={`use sourcier::SourceFilesMap;
+
+let mut files = SourceFilesMap::<u8>::new();
+files.add_file("a.rs", b"first").expect("capacity available");
+files.add_file("a.rs", b"second").expect("capacity available");
+files.finalize().expect("no capacity issue");
+
+assert_eq!(files.get_content(1), Some(&b"first"[..]));`} />
+
+## Surveiller la capacité du type d'id
+
+Le type d'id borne combien de fichiers la map peut adresser. Les ids sont à base un, donc `0` n'est jamais assigné :
+
+| Type d'id | Fichiers max | Bits d'id de fichier | Choisir quand |
+| ------- | --------- | ------------ | ----------- |
+| `u8`    | 255       | 8            | Outils mono-crate, tests, petites bases de code |
+| `u16`   | 65 535    | 16           | Serveurs de langage, monorepos, indexeurs |
+
+Appelez `remaining_capacity` sur un builder pour savoir combien de fichiers de plus le type d'id peut adresser :
+
+<Code lang="rust" code={`let mut builder = SourceFilesBuilder::<u8>::new();
+assert_eq!(builder.remaining_capacity(), 255);`} />
+
+Dépasser la limite échoue avec `MapError::TooManyFiles { max }`, à la fois pendant l'enregistrement et pendant la finalisation.
+
+## Étapes suivantes
+
+- Suivez <LinkCard title="Travailler avec les positions" href="/guides/working-with-positions/" /> pour compacter des spans contre les fichiers que vous avez enregistrés.
+- Lisez <LinkCard title="Le cycle de vie à deux phases" href="/explanation/two-phase-lifecycle/" /> pour comprendre pourquoi la finalisation est la frontière de phase.
+- Consultez <LinkCard title="Erreurs" href="/reference/errors/" /> quand un appel d'enregistrement renvoie une variante d'erreur.

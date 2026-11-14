@@ -1,0 +1,62 @@
+---
+title: Conception pour la performance
+description: "Les structures de données derrière les benchmarks — l'index de chemins vérifié, le stockage inline, les scans de ligne memchr et le format filaire reconstruit au chargement."
+type: explanation
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+La performance de Sourcier vient d'un petit ensemble de décisions de structures de données, chacune troquant de la complexité à un endroit contre un gain en facteur constant là où les outils passent leur temps. Cette page parcourt ces décisions et les chiffres qu'elles produisent. Toutes les mesures viennent de la suite criterion embarquée (`cargo bench -p sourcier-core`) sur la machine de référence, comparant 2.0 au baseline 1.0 dans la même fenêtre de mesure ; traitez les chiffres comme indicatifs.
+
+## Un index de chemins ouvert-adressé vérifié
+
+Les recherches de chemins passent par un index ouvert-adressé par map, du hash de chemin à l'entrée. Trois propriétés le définissent :
+
+- **Amorcé par map.** Le hash utilise deux chaînes de multiplication parallèles et un combine multiply avec une graine qui diffère par map, donc les motifs de collision adversariaux ne peuvent pas être précalculés (résistance HashDoS).
+- **Sondes vérifiées.** Un match de hash n'est qu'un préfiltre : chaque sonde est vérifiée contre les octets de chemin stockés. Les collisions ne peuvent jamais produire une mauvaise réponse, quelle que soit la qualité du hash.
+- **Dense et prévisible.** Sondage linéaire à un facteur de charge de 0,5 avec 4 octets par slot ; les sondes se terminent au premier slot vide, donc les misses coûtent aussi peu que les hits.
+
+Le compromis mesuré : la 2.0 dépense environ 20 % de latence en plus sur les hits (~41 us vs ~34 us par 2 000 lookups) en échange d'une vérification octet pour octet, de zéro allocation à la finalisation et d'environ la moitié de la mémoire d'état de lookup. Les misses, à ~33 us par 2 000, sont un nouveau scénario suivi.
+
+## Stockage de chemin inline
+
+Les entrées stockent les chemins avec optimisation chaîne courte : les chemins jusqu'à 30 octets vivent inline dans le payload de 32 octets, et les chemins plus longs retombent sur un `Box<str>`. La plupart des chemins d'arborescence source tiennent dans la borne inline, ce qui garde le chemin de lookup chaud à deux lignes de cache dépendantes — le slot d'index et l'entrée — et rend la finalisation sans allocation pour les arbres typiques.
+
+## Un tri, une passe
+
+La finalisation est un seul tri instable avec un bris d'égalité sur l'ordre d'enregistrement, plus une passe O(n) qui assigne les ids et construit l'index. Le contenu des fichiers n'est jamais copié pendant la finalisation. L'effet mesuré :
+
+| Scénario | 1.0 | 2.0 | Changement |
+| -------- | --- | --- | ------ |
+| Finaliser 100 fichiers × 50 lignes | ~64 us | ~41 us | **-35 %** |
+| Finaliser 500 fichiers × 100 lignes | ~709 us | ~513 us | **-28 %** |
+| Phase de finalisation seule, 2 000 × 200 lignes | ~3,7 ms | ~2,8 ms | **-25 %** |
+
+## Scans de ligne memchr
+
+La fonctionnalité `view` indexe les frontières de lignes de chaque fichier avec un seul scan accéléré par `memchr` — la passe de comptage de la 1.0 a disparu — et stocke 4 octets par ligne comme offsets `u32`, ce qui plafonne les fichiers indexables à 4 GiB. La navigation ligne et colonne est une recherche binaire sur cette liste compacte :
+
+| Scénario | 1.0 | 2.0 | Changement |
+| -------- | --- | --- | ------ |
+| 1 000 extractions `view` multi-lignes | ~14,4 us | ~4,4 us | **-70 %** |
+| Offsets de ligne pour 100 fichiers × 1 000 lignes | ~0,79 ms | ~0,69 ms | **-12 %** |
+| 1 000 sondes offset-vers-(ligne, col) | — | ~8,2 us | nouveau |
+| Span `view_str` mono-ligne | — | ~257 ns | nouveau |
+
+Les offsets de ligne par fichier vivent dans un `Vec<Option<LineOffsets>>` dense indexé par id, donc le chemin chaud de vue ne fait aucun hashing du tout. La fonctionnalité opt-in `parallel` étale le scan sur les cœurs avec `rayon` ; sur la VM de référence à 2 cœurs, le surcoût du pool de threads a dépassé les économies du scan, ce qui explique pourquoi elle n'est pas par défaut.
+
+<Aside type="note">
+	Les pistes de benchmark `builder/*`, `position_from_offset/*` et `offset_from_position/*` épinglent le coût des ajouts de la 2.0 ; les pistes d'origine `finalize`, `get_id`, `view` et `line_offsets` sont inchangées.
+</Aside>
+
+## Le format filaire porte des données, pas d'état dérivé
+
+Les payloads sérialisés ne contiennent que les entrées brutes et le drapeau de phase. La table redondante `path_to_id` du format 1.0 a disparu : l'index est dérivé des entrées triées et reconstruit au chargement, et les payloads 1.0 se désérialisent toujours avec le champ redondant ignoré. Le hash d'entrée et le numéro de séquence sont pareillement de l'état dérivé — le hash dépend de la graine par map — donc ils sont reconstruits plutôt que persistés.
+
+Les ajouts DX délèguent à la même machinerie plutôt que d'ajouter de nouveaux chemins : le builder est un newtype inline sur la map, le pont d'offset réutilise l'index `LineOffsets` par fichier, et `PositionDisplay` rend paresseusement depuis des données empruntées. `rt-feedback` n'utilise que des atomiques ; aucun verrou n'est pris sur le chemin de rapport.
+
+## Étapes suivantes
+
+- Suivez <LinkCard title="Ajuster la performance" href="/guides/tuning-performance/" /> pour appliquer ces caractéristiques dans votre build.
+- Lisez <LinkCard title="Le cycle de vie à deux phases" href="/explanation/two-phase-lifecycle/" /> pour la frontière de phase qui rend l'index possible.
+- Consultez <LinkCard title="Encodage des positions" href="/reference/position-encoding/" /> pour les layouts compactés derrière les chiffres.

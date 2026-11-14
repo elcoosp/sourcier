@@ -1,0 +1,103 @@
+---
+title: Vues et navigation
+description: "Extrayez les octets exacts d'un span, reliez offsets d'octets et positions compactées, et rendez des diagnostics path:line:column sans allouer."
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Utilisez ce guide pour transformer des positions en octets source et naviguer les fichiers avec précision d'octet. Tout sur cette page nécessite la fonctionnalité par défaut `view`.
+
+## Extraire les octets d'un span
+
+`view` renvoie les octets exacts qu'une position couvre, y compris les spans multi-lignes et les terminateurs de ligne qu'ils contiennent :
+
+<Code lang="rust" code={`use sourcier::{AbsolutePosition, SourceFilePosition, SourceFilesMap};
+
+let mut files = SourceFilesMap::<u8>::new();
+files
+    .add_file("src/main.rs", b"fn main() {\\n    println!(\\"Hello\\");\\n}")
+    .expect("capacity available");
+files.finalize().expect("no capacity issue");
+
+let id = files.get_id("src/main.rs").expect("file present");
+let pos = AbsolutePosition::new(id, 2, 5, 2, 22);
+
+assert_eq!(files.view(id, &pos), Some(&b"println!(\\"Hello\\");"[..]));`} />
+
+Pour de la source UTF-8, `view_str` renvoie un `&str` à la place et donne `None` quand le span couperait un caractère multi-octets :
+
+<Code lang="rust" code={`let text = files.view_str(id, &pos).expect("utf-8 span");
+assert_eq!(text, "println!(\\"Hello\\");");`} />
+
+`view` gère aussi les spans de largeur nulle, qui se résolvent vers la tranche vide au point demandé.
+
+## Convertir offsets d'octets en positions et vice versa
+
+La map fait le pont entre offsets d'octets et positions compactées en O(log n) sur l'index de lignes par fichier, sans allocation :
+
+<Code lang="rust" code={`let pos = files.position_from_offset(id, 4).expect("in range");
+assert_eq!(pos.start_line(), 2);
+assert_eq!(pos.start_column(), 1);
+
+assert_eq!(files.offset_from_position(id, &pos), Some(4));`} />
+
+`position_from_offset` renvoie une position point de largeur nulle. Les offsets jusqu'à la longueur du contenu inclus se résolvent : la longueur du contenu se mappe à la colonne juste après le dernier octet, l'ancre d'insertion conventionnelle à la fin du fichier.
+
+<Aside type="caution">
+	Les offsets dont la ligne ou la colonne ne peut pas être représentée par l'encodage compacté se résolvent en `None` : fichiers de plus de 65 535 lignes, ou lignes de plus de 255 octets.
+</Aside>
+
+## Rendre les diagnostics
+
+`display_position` rend `path:line:column` via un `PositionDisplay` emprunté. Le construire ne fait aucune allocation, donc c'est bon marché de formater des diagnostics à gros volume :
+
+<Code lang="rust" code={`use sourcier::{SourceFilesBuilder, SourceFilePosition};
+
+let files = SourceFilesBuilder::<u8>::new()
+    .add_file("src/main.rs", b"fn main() {}")
+    .expect("capacity available")
+    .finalize()
+    .expect("no capacity issue");
+
+let id = files.get_id("src/main.rs").expect("file present");
+let pos = files.position_from_offset(id, 4).expect("in range");
+
+let rendered = files.display_position(id, &pos).expect("present").to_string();
+assert_eq!(rendered, "src/main.rs:1:5");`} />
+
+## Travailler avec l'index de lignes directement
+
+`line_offsets` expose l'index `LineOffsets` par fichier qui adosse les opérations ci-dessus. Vous pouvez aussi en calculer un autonome depuis n'importe quels octets :
+
+<Code lang="rust" code={`use sourcier::LineOffsets;
+
+let offsets = LineOffsets::compute(b"one\\ntwo").expect("within 4 GiB limit");
+assert_eq!(offsets.line_count(), 2);
+
+// Plage d'octets de la ligne 2 (base un ; la ligne 0 se résout en rien).
+assert_eq!(offsets.line_range(2), Some(4..7));
+
+// Offset vers (ligne, colonne), les deux à base un.
+assert_eq!(offsets.line_col_from_offset(5), Some((2, 2)));
+
+// (ligne, colonne) vers offset.
+assert_eq!(offsets.offset_from_line_col(2, 1), Some(4));`} />
+
+Autres accesseurs : `content_length` renvoie la longueur totale en octets, et `line_starts` expose la liste compacte d'offsets `u32`.
+
+## Connaître les limites
+
+| Limite | Valeur | Comportement en cas de dépassement |
+| ----- | ----- | ---------------------- |
+| Taille de fichier pour l'index de lignes | 4 GiB (offsets `u32`) | `LineOffsets::compute` échoue avec `MapError::FileTooLarge` ; les fichiers enregistrés via une map ne résolvent aucune vue |
+| Lignes par fichier | 65 535 (`u16`) | La conversion d'offset renvoie `None` |
+| Colonnes par ligne | 255 colonnes d'octets (`u8`) | La conversion d'offset renvoie `None` |
+
+Les offsets de ligne utilisent un seul scan accéléré par `memchr` et stockent 4 octets par ligne. Activez la fonctionnalité opt-in `parallel` pour étaler le scan sur les cœurs — voir [Ajuster la performance](/guides/tuning-performance/).
+
+## Étapes suivantes
+
+- Suivez <LinkCard title="Partager des statistiques d'usage" href="/guides/usage-statistics/" /> pour observer l'activité de finalisation à travers les maps.
+- Suivez <LinkCard title="Ajuster la performance" href="/guides/tuning-performance/" /> pour les grands ensembles de fichiers.
+- Consultez <LinkCard title="Encodage des positions" href="/reference/position-encoding/" /> pour les limites derrière les résultats `None`.

@@ -1,0 +1,52 @@
+---
+title: Pourquoi Sourcier existe
+description: "Le problème des positions de diagnostic bon marché dans les compilateurs, linters et serveurs de langage, et la conception que Sourcier a choisie pour lui."
+type: explanation
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Les outils qui rapportent des diagnostics — compilateurs, linters, formateurs, serveurs de langage et éditeurs de code — manipulent constamment des positions. Chaque avertissement, erreur, surlignage, cible de saut et renommage doit dire vers quoi il pointe. La représentation évidente, un chemin `String` plus une poignée de champs `usize` par diagnostic, est chère dans chaque dimension qui compte à l'échelle.
+
+## Le coût de la représentation évidente
+
+Une position de diagnostic qui stocke son chemin de fichier comme une `String` paie à répétition pour ce choix :
+
+- **Mémoire.** Un chemin est stocké, cloné ou ré-alloué pour chaque position qui le porte. Une base de code avec un million de diagnostics stocke le même chemin un million de fois, directement ou derrière des compteurs de référence.
+- **Comparaison et ordre.** Trier les diagnostics par emplacement signifie comparer des chaînes avant de comparer des nombres. La comparaison de chaînes est plus lente que la comparaison d'entiers et plus difficile à rendre favorable au cache.
+- **Sérialisation.** Chaque position sérialise son chemin à nouveau. Les payloads filaires et les caches gonflent, et les allers-retours peuvent silencieusement changer le formatage des chemins.
+- **Localité.** Une position étalée sur cinq champs ou plus n'est pas une valeur : ce sont cinq valeurs qui doivent voyager, hasher, comparer et persister ensemble.
+
+Les positions doivent aussi se résoudre vers les octets exacts qu'elles couvrent — pour les correctifs rapides, pour les extraits dans les rapports, pour le contenu au survol. Cette résolution a besoin du contenu du fichier, ce qui aggrave le problème : les lookups de contenu devraient être aussi bon marché que les positions elles-mêmes.
+
+## La réponse de Sourcier
+
+Sourcier scinde le problème en deux et donne à chaque moitié la représentation la plus bon marché possible :
+
+1. **Un seul registre immuable tient les données lourdes.** Les fichiers sont enregistrés une fois, dédupliqués et triés pendant la finalisation, et la map répond ensuite aux lookups de chemin, d'id et de contenu en temps constant. Les données lourdes existent exactement une fois, peu importe combien de positions pointent dessus.
+2. **Une position est un seul `u64`.** L'id de fichier, la ligne de début, la colonne de début, la ligne de fin et la colonne de fin sont compactés en bits dans un seul mot machine. Les positions sont `Copy`, se comparent comme des entiers, se hashent comme des entiers, se sérialisent comme des entiers et se trient lexicographiquement par construction.
+
+Un million de diagnostics porte donc un million de mots machine plus un registre — pas un million de copies de chemins et de tuples de champs.
+
+<Aside type="note">
+	Le layout compacté est documenté et stable, donc les valeurs brutes `u64` peuvent être persistées et rechargées. Voir [Encodage des positions](/reference/position-encoding/) pour les tables de bits.
+</Aside>
+
+## Ce que Sourcier n'est pas
+
+Sourcier n'est pas une implémentation de source-map pour du code transposé : il ne mappe pas entre fichiers source et générés, et n'encode pas de noms de jetons ou de segments de mapping. Il suit des positions dans les fichiers qu'un outil lit réellement. Si votre outil analyse des fichiers source et rapporte des emplacements à l'intérieur, Sourcier est conçu pour vous.
+
+## Valeurs de conception
+
+L'API découle de quatre engagements :
+
+- **Bon marché par défaut.** Les positions se compactent sans coût de validation ; la validation est un `try_new` opt-in. La finalisation ne fait aucune allocation par chemin sur le tas pour les arborescences source typiques.
+- **Correct sous pression.** L'index de chemins vérifie chaque sonde contre les octets stockés, donc les clés adversariales ne peuvent pas précalculer de collisions, et les enregistrements en double se résolvent de façon déterministe.
+- **Typé aux frontières.** Le trait `FileId` est scellé, les énumérations d'erreur sont `#[non_exhaustive]`, et tout l'espace de travail interdit le code unsafe.
+- **Des octets quand vous en avez besoin.** La fonctionnalité `view` garde un index de lignes compact par fichier, donc toute position se résout vers les octets exacts qu'elle couvre.
+
+## Étapes suivantes
+
+- Lisez <LinkCard title="Le cycle de vie à deux phases" href="/explanation/two-phase-lifecycle/" /> pour la scission construction-finalisation-lookup qui rend le registre immuable.
+- Lisez <LinkCard title="Conception pour la performance" href="/explanation/performance-design/" /> pour les structures de données derrière les constantes.
+- Suivez <LinkCard title="Votre première source map" href="/tutorials/getting-started/" /> pour voir la conception en dix minutes de code.

@@ -1,0 +1,134 @@
+---
+title: Votre première source map
+description: "Enregistrez des fichiers source, assignez des ids stables, compactez un span dans un seul u64 et extrayez les octets exacts qu'il couvre."
+type: tutorial
+---
+
+import { Aside, Code, LinkCard, Steps } from '@astrojs/starlight/components';
+
+Ce tutoriel vous emmène à travers le chemin doré de Sourcier : enregistrer deux fichiers source, finaliser la map, chercher les fichiers par chemin et par id, compacter un span dans un seul `u64`, et extraire les octets exacts que ce span couvre. Vous avez besoin de Rust 1.99 ou plus récent et d'un terminal. Le tutoriel entier prend une dizaine de minutes.
+
+## Prérequis
+
+- Rust 1.99+ installé via [rustup](https://rustup.rs). Vérifiez le vôtre avec `rustc --version`.
+- Un terminal avec `cargo` dans votre `PATH`.
+
+## Créer un projet de démo
+
+<Steps>
+1. Créez une nouvelle crate binaire et entrez dedans :
+
+	<Code lang="bash" code={`cargo new span-demo
+cd span-demo`} />
+
+2. Ajoutez Sourcier comme dépendance :
+
+	<Code lang="bash" code={`cargo add sourcier`} />
+
+	Cargo ajoute la version `2.0` courante à `Cargo.toml`.
+
+3. Remplacez le contenu de `src/main.rs` par le code de l'étape suivante.
+</Steps>
+
+## Enregistrer les fichiers et finaliser
+
+Sourcier utilise un cycle de vie à deux phases : vous enregistrez d'abord les fichiers, puis vous appelez `finalize()` pour les trier, dédupliquer les enregistrements et assigner des ids stables à base un.
+
+Ajoutez ce code à `src/main.rs` :
+
+<Code lang="rust" code={`use sourcier::SourceFilesMap;
+
+fn main() {
+    // Les ids u8 supportent jusqu'à 255 fichiers ; u16 en supporte 65 535.
+    let mut files = SourceFilesMap::<u8>::new();
+
+    files
+        .add_file("src/main.rs", b"fn main() {\\n    println!(\\"Hello\\");\\n}")
+        .expect("capacity available");
+    files
+        .add_file("src/lib.rs", b"pub mod utils;")
+        .expect("capacity available");
+
+    // Trie par chemin, déduplique, assigne des ids à base un.
+    files.finalize().expect("no capacity issue");
+
+    println!("registered {} files", files.len());
+}`} />
+
+Exécutez le programme :
+
+<Code lang="bash" code={`cargo run`} />
+
+Vous voyez la sortie attendue :
+
+<Code lang="ansi" code={`registered 2 files`} />
+
+<Aside type="note">
+	`add_file` accepte n'importe quel `impl AsRef<str>` pour le chemin et
+	`impl Into<Vec<u8>>` pour le contenu, donc vous pouvez passer des chemins
+	`&str` et soit des tranches d'octets soit des buffers possédés.
+</Aside>
+
+## Chercher les fichiers par chemin et par id
+
+Après la finalisation, la map répond aux requêtes en temps constant. Étendez `main` :
+
+<Code lang="rust" code={`// Path vers id, et id vers path.
+let id = files.get_id("src/main.rs").expect("file present");
+assert_eq!(files.get_path(id), Some("src/main.rs"));
+
+// Les ids sont assignés dans l'ordre trié des chemins, à partir de 1.
+assert_eq!(id, 1);
+
+// Id vers entrée empruntée complète.
+let entry = files.get(id).expect("file present");
+assert_eq!(entry.path, "src/main.rs");
+assert!(entry.content.starts_with(b"fn main"));`} />
+
+`src/lib.rs` se trie avant `src/main.rs`, donc il reçoit l'id `1` et `src/main.rs` reçoit l'id `2`. Les ids triés sont stables : le même ensemble de fichiers produit toujours les mêmes ids, ce qui les rend sûrs à persister.
+
+## Compacter un span dans un u64
+
+`AbsolutePosition` compacte cinq champs — id de fichier, ligne de début, colonne de début, ligne de fin et colonne de fin — dans un seul `u64`. Les lignes et les colonnes sont à base un et la fin est inclusive :
+
+<Code lang="rust" code={`use sourcier::{AbsolutePosition, SourceFilePosition};
+
+let pos = AbsolutePosition::new(id, 2, 5, 2, 22);
+
+assert_eq!(pos.file_id(), id);
+assert_eq!(pos.start_line(), 2);
+assert_eq!(pos.start_column(), 5);
+assert_eq!(pos.end_line(), 2);
+assert_eq!(pos.end_column(), 22);`} />
+
+`AbsolutePosition::new` est infaillible et zéro-coût : les valeurs sont encodées telles quelles. Utilisez `try_new` quand vous voulez que le span soit validé comme une région bien formée à base un :
+
+<Code lang="rust" code={`assert!(AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1).is_err());
+assert!(AbsolutePosition::<u8>::try_new(1, 1, 1, 1, 1).is_ok());`} />
+
+## Extraire les octets exacts du span
+
+Avec la fonctionnalité par défaut `view`, la map fait le pont entre positions et octets qu'elles couvrent :
+
+<Code lang="rust" code={`assert_eq!(
+    files.view(id, &pos),
+    Some(&b"println!(\\"Hello\\");"[..])
+);`} />
+
+`view` renvoie les octets du span y compris les terminateurs de ligne qu'il couvre. Pour de la source UTF-8, vous pouvez utiliser `view_str`, qui renvoie `&str` et donne `None` quand le span coupe un caractère multi-octets.
+
+Votre programme enregistre maintenant des fichiers, les cherche, compacte des positions et extrait les octets source. Imprimez la vue extraite à la fin de `main` pour la voir à l'œuvre :
+
+<Code lang="rust" code={`if let Some(bytes) = files.view(id, &pos) {
+    println!("{}", String::from_utf8_lossy(bytes));
+}`} />
+
+<Code lang="ansi" code={`println!("Hello");`} />
+
+## Étapes suivantes
+
+Vous avez terminé le chemin doré. D'ici :
+
+- Suivez <LinkCard title="Enregistrer des fichiers source" href="/guides/registering-files/" /> pour les boucles, les lots, l'enregistrement de `PathBuf` et la gestion des doublons.
+- Suivez <LinkCard title="Travailler avec les positions" href="/guides/working-with-positions/" /> pour les conversions, l'ordre et la sérialisation.
+- Parcourez la <LinkCard title="Surface d'API" href="/reference/api/" /> pour la liste complète des méthodes.

@@ -1,0 +1,101 @@
+---
+title: Gérer les erreurs
+description: "Distinguez chaque variante de MapError et PositionError, matchez-les exhaustivement malgré non_exhaustive, et récupérez avec le bon repli."
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Utilisez ce guide pour gérer les deux énumérations d'erreur que Sourcier renvoie : `MapError` pour construire ou interroger une map, et `PositionError` pour les constructeurs de positions vérifiés. Les deux énumérations sont `#[non_exhaustive]`, donc les branches de match hors de la crate incluent toujours une branche attrape-tout.
+
+## Matcher les variantes de MapError
+
+`MapError` a cinq variantes. Cet exemple récupère de chacune de façon appropriée :
+
+<Code lang="rust" code={`use sourcier::{MapError, SourceFilesBuilder};
+
+fn register(builder: &mut SourceFilesBuilder<u8>, path: &str, data: &[u8]) {
+    if let Err(err) = builder.add_file_mut(path, data) {
+        match err {
+            MapError::TooManyFiles { max } => {
+                eprintln!("id type exhausted: at most {max} files");
+                // Récupération : passer à des ids u16, ou arrêter d'accepter des fichiers.
+            }
+            MapError::FileTooLarge { size } => {
+                eprintln!("file of {size} bytes exceeds the 4 GiB line-offset limit");
+                // Récupération : sauter le fichier ; les vues se résolvent en None pour lui.
+            }
+            MapError::PathNotUtf8 { path } => {
+                eprintln!("skipping non-UTF-8 path: {path}");
+                // Récupération : sauter ; le chemin porte des remplacements U+FFFD.
+            }
+            // La map ne peut pas être modifiée après finalisation ; avec le
+            // builder à état de type ces deux variantes sont non représentables,
+            // mais la map brute peut toujours les rapporter.
+            MapError::Finalized | MapError::AlreadyFinalized => {
+                unreachable!("builder guarantees the build phase")
+            }
+            // non_exhaustive : gardez toujours une branche attrape-tout.
+            other => {
+                eprintln!("unexpected map error: {other}");
+            }
+        }
+    }
+}`} />
+
+Les variantes et quand elles se produisent :
+
+| Variante | Champs | Se produit quand |
+| ------- | ------ | ----------- |
+| `TooManyFiles` | `max: usize` | L'enregistrement ou la finalisation dépasse la capacité du type d'id (255 pour `u8`, 65 535 pour `u16`) |
+| `AlreadyFinalized` | — | `finalize` est appelé sur une map déjà finalisée |
+| `Finalized` | — | La map finalisée est mutée (`add_file`, `add_files`, `add_path`) |
+| `FileTooLarge` | `size: u64` | Un fichier dépasse la limite d'offsets de ligne `u32` de 4 GiB |
+| `PathNotUtf8` | `path: String` | `add_path` reçoit un chemin qui n'est pas de l'UTF-8 valide |
+
+<Aside type="tip">
+	`SourceFilesBuilder` n'expose que l'API d'enregistrement et `finalize` le consomme, donc `MapError::Finalized` et `MapError::AlreadyFinalized` ne peuvent pas être produits via le builder. Ils restent atteignables via la `SourceFilesMap` brute, qui garde ses erreurs de phase à l'exécution.
+</Aside>
+
+## Gérer les échecs de position vérifiés
+
+`PositionError` a une seule variante, `InvalidRange`, qui porte le span rejeté :
+
+<Code lang="rust" code={`use sourcier::{AbsolutePosition, PositionError};
+
+match AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1) {
+    Ok(pos) => println!("packed as {}", pos.as_raw()),
+    Err(PositionError::InvalidRange { start_line, start_col, end_line, end_col }) => {
+        eprintln!(
+            "invalid span {start_line}:{start_col}-{end_line}:{end_col}"
+        );
+    }
+    Err(_) => unreachable!("only one variant exists today"),
+}`} />
+
+Un span valide satisfait tous les critères suivants :
+
+- `start_line >= 1` et `end_line >= 1`
+- `start_col >= 1` et `end_col >= 1`
+- `start_line < end_line`, ou `start_line == end_line && start_col <= end_col`
+
+## Lire les chaînes d'affichage
+
+Les deux énumérations implémentent `std::error::Error` via `thiserror`, et leurs chaînes d'affichage font partie de la surface d'API et sont couvertes par des tests d'instantané :
+
+<Code lang="text" code={`cannot register more than 255 files for this file id type
+the source files map has already been finalized
+cannot modify the source files map after finalization
+file content of 4294967296 bytes exceeds the 4 GiB line offset limit
+path is not valid UTF-8: caf<U+FFFD>.txt
+invalid position range: start 2:1 must not come after end 1:1 and all lines and columns must be at least 1`} />
+
+## Planifier la capacité en amont
+
+`MapError::TooManyFiles` est la variante que la plupart des outils rencontrent en premier. Choisissez le type d'id avant de commencer l'enregistrement : `u8` adresse 255 fichiers, `u16` en adresse 65 535. Vérifiez `remaining_capacity` sur un builder pour échouer tôt avec votre propre message au lieu de faire surface l'erreur de la bibliothèque.
+
+## Étapes suivantes
+
+- Suivez <LinkCard title="Enregistrer des fichiers source" href="/guides/registering-files/" /> pour éviter les erreurs de capacité en premier lieu.
+- Consultez la <LinkCard title="Référence des erreurs" href="/reference/errors/" /> pour la liste complète des variantes avec les tables de champs.
+- Lisez <LinkCard title="Sûreté et stabilité" href="/explanation/safety-and-stability/" /> pour voir comment `non_exhaustive` interagit avec la politique semver.

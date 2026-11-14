@@ -1,0 +1,75 @@
+---
+title: Encodage des positions
+description: "Layouts de bits u64 stables pour AbsolutePosition et RelativePosition, l'encodage zéro réservé, et les règles de compatibilité du format filaire."
+type: reference
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Les positions sont des encodages `u64` stables. Le layout est documenté pour que les valeurs brutes puissent être persistées en sécurité : le layout fait partie de l'API publique et est stable à travers les versions compatibles semver. Tous les champs sont compactés du plus au moins significatif, et la ligne de fin et la colonne de fin sont inclusives.
+
+## Layout absolu
+
+`AbsolutePosition<Id>` compacte cinq champs. L'id de fichier occupe toujours les bits les plus significatifs, et les champs restants sont disposés pour qu'aucun bit ne soit gaspillé :
+
+| Type d'id | Id de fichier | Ligne de début | Col de début | Ligne de fin | Col de fin |
+| ------- | -------- | ---------- | --------- | -------- | ------- |
+| `u8`    | `56..64` | `40..56`   | `32..40`  | `16..32` | `0..8`  |
+| `u16`   | `48..64` | `32..48`   | `24..32`  | `8..24`  | `0..8`  |
+
+Les largeurs de champ découlent des plages : les lignes sont `u16` (16 bits), les colonnes sont `u8` (8 bits), et le champ d'id fait 8 bits pour `u8` et 16 bits pour `u16`.
+
+Parce que les champs sont ordonnés du plus au moins significatif, comparer les valeurs compactées comme des entiers équivaut à ordonner les spans lexicographiquement : id de fichier d'abord, puis ligne de début, colonne de début, ligne de fin, colonne de fin.
+
+## Layout relatif
+
+`RelativePosition` ne stocke pas d'id de fichier et se compacte dans les 48 bits bas :
+
+| Champ | Bits |
+| ----- | ---- |
+| Ligne de début | `32..48` |
+| Col de début | `24..32` |
+| Ligne de fin | `8..24` |
+| Col de fin | `0..8` |
+
+Les 16 bits hauts sont toujours à zéro. `RelativePosition::from_raw` les masque, donc les valeurs avec des déchets dans les bits hauts font quand même un aller-retour sans perte.
+
+## Encodages réservés
+
+Les ids sont à base un : le premier fichier d'une map reçoit l'id `1`, et `0` n'est jamais assigné. Cela garde l'encodage tout-à-zéro réservé à un usage futur comme sentinelle :
+
+- `AbsolutePosition::from_raw` renvoie `None` quand l'id de fichier embarqué vaut `0`, pour les deux types d'id.
+- `RelativePosition::from_raw` masque les bits hauts et accepte la valeur tout-à-zéro ; utilisez `try_new` si vous avez besoin de validation de plage à la reconstruction.
+
+## Limites
+
+| Champ | Largeur | Limite | Dépassement |
+| ----- | ----- | ----- | ------------ |
+| Fichiers par map (ids `u8`) | 8 bits | 255 fichiers | `MapError::TooManyFiles { max: 255 }` |
+| Fichiers par map (ids `u16`) | 16 bits | 65 535 fichiers | `MapError::TooManyFiles { max: 65535 }` |
+| Numéros de ligne | 16 bits | 65 535 lignes | La conversion d'offset renvoie `None` |
+| Colonnes | 8 bits | 255 colonnes d'octets | La conversion d'offset renvoie `None` |
+| Taille de fichier pour l'index de lignes | Offsets 32 bits | 4 GiB | `MapError::FileTooLarge { size }` |
+
+Les colonnes sont des colonnes d'octets, pas des colonnes de caractères : un caractère UTF-8 multi-octets compte une colonne par octet.
+
+## Format filaire
+
+Avec la fonctionnalité `serde`, `SourceFilesMap` se sérialise en un payload qui ne porte que les entrées brutes et le drapeau de phase ; l'état de lookup est dérivé des entrées triées et reconstruit au chargement. Cela garde les payloads compacts — environ la moitié de la mémoire d'état de lookup de la 1.0.
+
+Compatibilité ascendante :
+
+- Les payloads 2.0 reconstruisent l'index de chemins vérifié au chargement.
+- Les payloads 1.0 qui portent encore la table redondante `path_to_id` se désérialisent sans erreur ; le champ redondant est ignoré.
+
+`AbsolutePosition`, `RelativePosition` et `FeedbackSnapshot` se sérialisent sous leurs formes brutes avec la fonctionnalité par défaut `serde`, et les allers-retours préservent les bits exactement.
+
+<Aside type="caution">
+	Les valeurs brutes `u64` sont sûres à persister seulement à l'intérieur d'une ligne de version compatible semver de l'encodage. Le layout est documenté et stable, mais une version majeure peut le redéfinir ; re-dérivez les valeurs brutes à travers les montées majeures.
+</Aside>
+
+## Étapes suivantes
+
+- Suivez <LinkCard title="Travailler avec les positions" href="/guides/working-with-positions/" /> pour les recettes de construction et de conversion.
+- Consultez <LinkCard title="Erreurs" href="/reference/errors/" /> pour les variantes d'erreur nommées dans la table des limites.
+- Lisez <LinkCard title="Pourquoi Sourcier existe" href="/explanation/why-sourcier/" /> pour le raisonnement derrière la compaction des spans dans des `u64`.

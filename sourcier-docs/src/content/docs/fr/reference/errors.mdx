@@ -1,0 +1,57 @@
+---
+title: Erreurs
+description: "Chaque variante de MapError et PositionError avec champs, chaînes d'affichage et les conditions qui les produisent."
+type: reference
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Les deux énumérations d'erreur dérivent `Debug`, `Clone`, `PartialEq` et `Eq`, implémentent `std::error::Error` via `thiserror`, et sont `#[non_exhaustive]` : les branches de match hors de cette crate contiennent toujours une branche attrape-tout.
+
+## `MapError`
+
+Erreurs produites pendant la construction ou l'interrogation d'une `SourceFilesMap`.
+
+| Variante | Champs | Chaîne d'affichage | Produite par |
+| ------- | ------ | -------------- | ----------- |
+| `TooManyFiles` | `max: usize` | `cannot register more than {max} files for this file id type` | `add_file`, `add_files`, `add_path`, `finalize` au-delà de la capacité du type d'id (255 pour `u8`, 65 535 pour `u16`) |
+| `AlreadyFinalized` | — | `the source files map has already been finalized` | `finalize` appelé deux fois sur une map brute |
+| `Finalized` | — | `cannot modify the source files map after finalization` | `add_file`, `add_files` ou `add_path` après finalisation |
+| `FileTooLarge` | `size: u64` | `file content of {size} bytes exceeds the 4 GiB line offset limit` | Construction d'offsets de ligne pour un fichier au-dessus de `u32::MAX` octets |
+| `PathNotUtf8` | `path: String` | `path is not valid UTF-8: {path}` | `add_path` avec un chemin qui n'est pas de l'UTF-8 valide ; le champ porte le rendu avec perte (octets invalides remplacés par `U+FFFD`) |
+
+<Aside type="note">
+	`Finalized` et `AlreadyFinalized` sont non représentables via
+	`SourceFilesBuilder` : le builder à état de type n'expose que l'enregistrement, et `finalize` le consomme. Ils restent atteignables via la map brute.
+</Aside>
+
+## `PositionError`
+
+Erreurs produites par les constructeurs vérifiés `try_new` d'`AbsolutePosition` et `RelativePosition`.
+
+| Variante | Champs | Chaîne d'affichage |
+| ------- | ------ | -------------- |
+| `InvalidRange` | `start_line: u16`, `start_col: u8`, `end_line: u16`, `end_col: u8` | `invalid position range: start {start_line}:{start_col} must not come after end {end_line}:{end_col} and all lines and columns must be at least 1` |
+
+`InvalidRange` se déclenche quand l'un des critères suivants échoue :
+
+- `start_line >= 1` et `end_line >= 1`
+- `start_col >= 1` et `end_col >= 1`
+- `start_line < end_line`, ou `start_line == end_line && start_col <= end_col`
+
+## Résultats par API
+
+| API | Succès | Échec |
+| --- | ------- | ------- |
+| `add_file` / `add_file_mut` | Enregistre le fichier | `TooManyFiles` |
+| `add_files` | Enregistre chaque fichier, tout-ou-rien | `TooManyFiles` ; la map est inchangée à l'échec |
+| `add_path` | Enregistre le fichier | `PathNotUtf8`, `TooManyFiles` |
+| `finalize` | Assigne les ids, bascule la phase | `AlreadyFinalized`, `TooManyFiles` |
+| `LineOffsets::compute` | Construit l'index | `FileTooLarge` |
+| `AbsolutePosition::try_new` / `RelativePosition::try_new` | Compacte le span | `InvalidRange` |
+| `get_id`, `get_path`, `get_content`, `get`, `view`, `view_str`, `position_from_offset`, `offset_from_position`, `display_position` | Résultats `Option` | Pas d'erreurs — les ids inconnus, les maps non finalisées et les spans non résolubles renvoient `None` |
+
+## Étapes suivantes
+
+- Suivez <LinkCard title="Gérer les erreurs" href="/guides/handling-errors/" /> pour les motifs de récupération par variante.
+- Consultez <LinkCard title="Encodage des positions" href="/reference/position-encoding/" /> pour les limites derrière `FileTooLarge` et `TooManyFiles`.

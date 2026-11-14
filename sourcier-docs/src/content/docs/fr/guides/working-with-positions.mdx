@@ -1,0 +1,110 @@
+---
+title: Travailler avec les positions
+description: "Créez des spans compactés avec des constructeurs vérifiés et non vérifiés, convertissez entre formes absolue et relative, et ordonnez ou sérialisez-les."
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Utilisez ce guide pour créer, valider, convertir, ordonner et sérialiser des positions compactées. Deux types couvrent les deux situations qu'on rencontre dans un outil : `AbsolutePosition<Id>` adresse un span dans un fichier précis d'une map, et `RelativePosition` ne porte que le span — ligne de début, colonne de début, ligne de fin, colonne de fin — pour que vous puissiez le stocker ou le comparer sans le lier à un fichier.
+
+## Créer une position absolue
+
+`AbsolutePosition::new` compacte les cinq composants tels quels. Elle est infaillible et zéro-coût :
+
+<Code lang="rust" code={`use sourcier::AbsolutePosition;
+
+// id de fichier 7, début 2:5, fin 2:22 (inclusive).
+let pos = AbsolutePosition::<u8>::new(7, 2, 5, 2, 22);`} />
+
+Les lignes et les colonnes sont à base un ; la ligne de fin et la colonne de fin sont inclusives. La valeur compactée s'ordonne comme un ordre lexicographique naturel des spans, donc les positions se trient par comparaison d'entiers.
+
+## Valider des spans avec des constructeurs vérifiés
+
+Quand un span vient d'une entrée utilisateur ou d'une source non fiable, utilisez `try_new`. Elle renvoie `PositionError::InvalidRange` quand une ligne ou une colonne vaut zéro, ou quand le début ne vient pas avant (ou exactement à) la fin :
+
+<Code lang="rust" code={`use sourcier::AbsolutePosition;
+
+assert!(AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1).is_err());
+assert!(AbsolutePosition::<u8>::try_new(1, 1, 5, 1, 4).is_err());
+assert!(AbsolutePosition::<u8>::try_new(1, 1, 1, 1, 1).is_ok());
+assert!(AbsolutePosition::<u8>::try_new(1, 1, 4, 1, 5).is_ok());`} />
+
+`RelativePosition::try_new` applique les mêmes règles aux spans sans fichier.
+
+## Convertir entre absolu et relatif
+
+Retirez l'id de fichier avec `to_relative`, et attachez-en un avec `RelativePosition::to_absolute` :
+
+<Code lang="rust" code={`use sourcier::{AbsolutePosition, RelativePosition};
+
+let abs = AbsolutePosition::<u8>::new(7, 2, 5, 2, 22);
+assert_eq!(abs.to_relative(), RelativePosition::new(2, 5, 2, 22));
+
+let rel = RelativePosition::new(2, 5, 2, 22);
+assert_eq!(rel.to_absolute(3_u8), AbsolutePosition::<u8>::new(3, 2, 5, 2, 22));`} />
+
+`From<AbsolutePosition<Id>> for RelativePosition` est aussi implémenté, donc `let rel: RelativePosition = abs.into();` fonctionne.
+
+## Construire des spans en contexte const
+
+`RelativePosition::new` et `RelativePosition::from_raw` sont `const fn`, donc les spans peuvent être construits et stockés dans des items `const` et `static` :
+
+<Code lang="rust" code={`use sourcier::RelativePosition;
+
+const STD_SPAN: RelativePosition = RelativePosition::new(1, 1, 1, 1);`} />
+
+<Aside type="note">
+	`AbsolutePosition::new` n'est pas une `const fn` parce qu'elle route l'id à travers le trait `FileId` ; utilisez les constructeurs const `RelativePosition` quand vous avez besoin de compaction à la compilation.
+</Aside>
+
+## Faire l'aller-retour par l'encodage brut
+
+`as_raw` renvoie l'encodage `u64` stable et `from_raw` reconstruit une position à partir de lui. Pour les positions absolues, `from_raw` renvoie `None` quand l'id de fichier embarqué ne peut pas être représenté par `Id` — y compris l'id jamais assigné `0` :
+
+<Code lang="rust" code={`use sourcier::AbsolutePosition;
+
+let pos = AbsolutePosition::<u8>::new(42, 1, 2, 3, 4);
+let copy = AbsolutePosition::<u8>::from_raw(pos.as_raw()).expect("valid raw value");
+assert_eq!(pos, copy);`} />
+
+Le layout de bits est stable à travers les versions compatibles semver, donc les valeurs brutes peuvent être persistées en sécurité. Voir [Encodage des positions](/reference/position-encoding/) pour les plages de bits exactes.
+
+## Ordonner et comparer
+
+Les positions dérivent `PartialOrd` et `Ord`. Ordonner par la valeur compactée équivaut à ordonner les spans lexicographiquement : id de fichier d'abord, puis ligne de début, colonne de début, ligne de fin et colonne de fin :
+
+<Code lang="rust" code={`use sourcier::AbsolutePosition;
+
+let a = AbsolutePosition::<u8>::new(1, 1, 1, 1, 1);
+let b = AbsolutePosition::<u8>::new(1, 1, 1, 1, 2);
+let c = AbsolutePosition::<u8>::new(1, 2, 1, 2, 1);
+let d = AbsolutePosition::<u8>::new(2, 1, 1, 1, 1);
+assert!(a < b && b < c && c < d);`} />
+
+## Sérialiser les positions
+
+Avec la fonctionnalité par défaut `serde`, les deux types de position implémentent `Serialize` et `Deserialize`, et un aller-retour préserve les bits exactement :
+
+<Code lang="rust" code={`use sourcier::RelativePosition;
+
+let pos = RelativePosition::new(2, 5, 3, 10);
+let json = serde_json::to_string(&pos).expect("serializable");
+assert_eq!(serde_json::from_str::<RelativePosition>(&json).expect("valid"), pos);`} />
+
+## Rendre les spans comme texte
+
+`Display` rend `start_line:start_column-end_line:end_column` :
+
+<Code lang="rust" code={`use sourcier::{AbsolutePosition, RelativePosition};
+
+assert_eq!(AbsolutePosition::<u8>::new(1, 10, 5, 12, 20).to_string(), "10:5-12:20");
+assert_eq!(RelativePosition::new(2, 5, 2, 22).to_string(), "2:5-2:22");`} />
+
+Pour rendre une position avec son chemin de fichier comme `path:line:column`, utilisez `display_position` sur une map finalisée — voir [Vues et navigation](/guides/navigating-source/).
+
+## Étapes suivantes
+
+- Suivez <LinkCard title="Vues et navigation" href="/guides/navigating-source/" /> pour relier offsets d'octets et positions.
+- Consultez <LinkCard title="Encodage des positions" href="/reference/position-encoding/" /> avant de persister des valeurs brutes.
+- Consultez <LinkCard title="Erreurs" href="/reference/errors/" /> pour la forme exacte de `PositionError::InvalidRange`.

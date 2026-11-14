@@ -1,0 +1,61 @@
+---
+title: Journal de modification
+description: "Historique des versions de Sourcier, actuellement la version 2.0 avec le builder, le pont d'offsets et l'index de chemins vérifié."
+type: reference
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Cette page résume l'historique des versions. Le journal canonique généré vit dans [CHANGELOG.md](https://github.com/elcoosp/sourcier/blob/main/CHANGELOG.md) et est produit avec git-cliff depuis l'historique des commits.
+
+## 2.0 (courante)
+
+La ligne de version 2.0 se concentre sur l'expérience développeur autour du moteur central et sur un chemin de lookup plus léger et plus sûr.
+
+### Ajouté
+
+- Le `SourceFilesBuilder` à état de type : enregistrement chaînable avec séparation de phase à la compilation, `add_file_mut` pour les boucles, et `remaining_capacity`.
+- Enregistrement par lot tout-ou-rien avec `add_files`.
+- Enregistrement de chemin OS avec `add_path` et un `MapError::PathNotUtf8` dédié pour les chemins non-UTF-8.
+- Le pont d'offsets : `position_from_offset` et `offset_from_position` convertissent entre offsets d'octets et positions compactées en O(log n) sans allocation.
+- `PositionDisplay` et `display_position` rendent des diagnostics `path:line:column` sans allouer.
+- Constructeurs const et conversions de span pour les positions (`RelativePosition::new` et `from_raw` sont `const fn`).
+- Un index de chemins ouvert-adressé vérifié avec stockage de chemin inline (les chemins jusqu'à 30 octets vivent dans leur entrée, sans allocation sur le tas).
+- Accesseur de débuts de ligne exposé et initialisation vectorielle optimisée dans le moteur central.
+
+### Modifié
+
+- Suppression des modules obsolètes `clo`, `fid` et `sfm` et restructuration des modules centraux.
+- Documentation de crate enrichie avec des métriques d'empreinte mémoire.
+- La fonctionnalité `parallel` est transmise de la façade vers la bibliothèque centrale.
+
+### Performance
+
+- Finalisation améliorée de 25-35 % à travers les scénarios de benchmark.
+- Extraits `view` multi-lignes améliorés de 70 %.
+- L'index path-vers-id échange ~20 % de latence de hit contre une vérification octet pour octet, un amorçage par map résistant au HashDoS, zéro allocation à la finalisation et environ la moitié de la mémoire d'état de lookup.
+
+### Compatibilité
+
+- Le format filaire 2.0 de `SourceFilesMap` a supprimé la table redondante `path_to_id` ; elle est dérivée des entrées triées et reconstruite au chargement.
+- Les payloads 1.0 qui portent encore le champ se désérialisent sans erreur et sont ignorés.
+
+## 0.1.0 (2025-12-19)
+
+Première version publique :
+
+- Modules `fid`, `sfm` et `sfp` pour une représentation compacte de position en `u64` et un mapping path-vers-id O(1).
+- `SourceFilesMap` avec stockage de contenu et `get_content`.
+- `RuntimeFeedback` preuve de concept avec `with_feedback`.
+- La fonctionnalité `view` et le support `serde` optionnel.
+
+<Aside type="note">
+        Dans le dépôt, la section 2.0.0 se trouve actuellement sous le titre
+        Unreleased du journal généré ; la version de l'espace de travail dans
+        Cargo.toml est 2.0.0.
+</Aside>
+
+## Étapes suivantes
+
+- Lisez le [journal complet sur GitHub](https://github.com/elcoosp/sourcier/blob/main/CHANGELOG.md).
+- Consultez <LinkCard title="Le cycle de vie à deux phases" href="/explanation/two-phase-lifecycle/" /> pour la conception que le builder 2.0 formalise.

@@ -1,0 +1,169 @@
+---
+title: Surface d'API
+description: "Référence complète de chaque type, trait et fonction publics que Sourcier exporte, avec signatures, paramètres et valeurs de retour."
+type: reference
+---
+
+import { Aside, Badge, LinkCard } from '@astrojs/starlight/components';
+
+Sourcier est une crate façade : `sourcier` ré-exporte toute l'API de `sourcier-core`, donc `sourcier::...` est le seul chemin dont vous aurez jamais besoin. Cette page liste chaque élément public avec sa signature. La référence générée par rustdoc vit sur [docs.rs/sourcier](https://docs.rs/sourcier).
+
+## Types de registre
+
+### `SourceFilesMap<Id: FileId>`
+
+Registre à deux phases : enregistrez des fichiers, finalisez, puis interrogez immuablement.
+
+| Méthode | Signature | Renvoie | Description |
+| ------ | --------- | ------- | ----------- |
+| `new` | `pub fn new() -> Self` | `Self` | Map vide sans stockage pré-réservé |
+| `with_capacity` | `pub fn with_capacity(expected_files: usize) -> Self` | `Self` | Map vide qui pré-réserve le stockage |
+| `with_feedback` <Badge text="rt-feedback" size="small" /> | `pub fn with_feedback(feedback: Arc<RuntimeFeedback>) -> Self` | `Self` | Map qui rapporte les statistiques de finalisation |
+| `add_file` | `pub fn add_file(&mut self, path: impl AsRef<str>, content: impl Into<Vec<u8>>) -> Result<(), MapError>` | `Result<(), MapError>` | Enregistre un fichier |
+| `add_files` | `pub fn add_files<I, P, C>(&mut self, files: I) -> Result<(), MapError> where I: IntoIterator<Item = (P, C)>` | `Result<(), MapError>` | Enregistrement par lot tout-ou-rien |
+| `add_path` | `pub fn add_path(&mut self, path: impl AsRef<Path>, content: impl Into<Vec<u8>>) -> Result<(), MapError>` | `Result<(), MapError>` | Enregistre un chemin OS ; échoue avec `PathNotUtf8` sur les chemins non-UTF-8 |
+| `finalize` | `pub fn finalize(&mut self) -> Result<(), MapError>` | `Result<(), MapError>` | Trie par chemin, déduplique, assigne des ids à base un |
+| `is_finalized` | `pub fn is_finalized(&self) -> bool` | `bool` | Requête de phase |
+| `len` / `is_empty` | `pub fn len(&self) -> usize` / `pub fn is_empty(&self) -> bool` | — | Nombre d'entrées |
+| `total_bytes` | `pub fn total_bytes(&self) -> usize` | `usize` | Total d'octets de contenu enregistrés |
+| `paths` | `pub fn paths(&self) -> impl Iterator<Item = &str>` | itérateur | Chemins enregistrés |
+| `iter` | `pub fn iter(&self) -> Iter<'_, Id>` | `Iter<'_, Id>` | Fichiers avec ids ; ne produit rien avant finalisation |
+| `get_id` | `pub fn get_id(&self, path: &str) -> Option<Id>` | `Option<Id>` | Path vers id, O(1) après finalisation |
+| `get_path` | `pub fn get_path(&self, id: Id) -> Option<&str>` | `Option<&str>` | Id vers path, O(1) |
+| `get_content` | `pub fn get_content(&self, id: Id) -> Option<&[u8]>` | `Option<&[u8]>` | Id vers octets de contenu, O(1) |
+| `get` | `pub fn get(&self, id: Id) -> Option<FileRef<'_, Id>>` | `Option<FileRef<'_, Id>>` | Id vers `FileRef { id, path, content }` emprunté |
+| `view` <Badge text="view" size="small" /> | `pub fn view(&self, id: Id, pos: &impl SourceFilePosition) -> Option<&[u8]>` | `Option<&[u8]>` | Octets exacts que couvre la position |
+| `view_str` <Badge text="view" size="small" /> | `pub fn view_str(&self, id: Id, pos: &impl SourceFilePosition) -> Option<&str>` | `Option<&str>` | Vue UTF-8 ; `None` sur des frontières non-UTF-8 |
+| `line_offsets` <Badge text="view" size="small" /> | `pub fn line_offsets(&self, id: Id) -> Option<&LineOffsets>` | `Option<&LineOffsets>` | Index de lignes par fichier |
+| `position_from_offset` <Badge text="view" size="small" /> | `pub fn position_from_offset(&self, id: Id, offset: usize) -> Option<AbsolutePosition<Id>>` | `Option<AbsolutePosition<Id>>` | Offset d'octet vers position point, O(log n) |
+| `offset_from_position` <Badge text="view" size="small" /> | `pub fn offset_from_position(&self, id: Id, pos: &impl SourceFilePosition) -> Option<usize>` | `Option<usize>` | Début de span vers offset d'octet, O(log n) |
+| `display_position` | `pub fn display_position(&self, id: Id, pos: &impl SourceFilePosition) -> Option<PositionDisplay<'_>>` | `Option<PositionDisplay<'_>>` | Renderer `path:line:column` sans allocation |
+
+`&SourceFilesMap` implémente `IntoIterator`, produisant des entrées `FileRef` dans l'ordre des ids ; utilisez-le comme `for entry in &files { ... }`.
+
+### `SourceFilesBuilder<Id: FileId>`
+
+Compagnon à état de type en phase de construction de `SourceFilesMap`. Il n'expose que l'enregistrement, donc `MapError::Finalized` et `MapError::AlreadyFinalized` sont non représentables, et `finalize` consomme le builder et rend la map prête pour le lookup.
+
+| Méthode | Signature | Renvoie | Description |
+| ------ | --------- | ------- | ----------- |
+| `new` | `pub fn new() -> Self` | `Self` | Builder vide |
+| `with_capacity` | `pub fn with_capacity(expected_files: usize) -> Self` | `Self` | Builder qui pré-réserve le stockage |
+| `with_feedback` <Badge text="rt-feedback" size="small" /> | `pub fn with_feedback(feedback: Arc<RuntimeFeedback>) -> Self` | `Self` | Builder qui rapporte les statistiques de finalisation |
+| `add_file` | `pub fn add_file(self, path: impl AsRef<str>, content: impl Into<Vec<u8>>) -> Result<Self, MapError>` | `Result<Self, MapError>` | Enregistrement chaînable |
+| `add_file_mut` | `pub fn add_file_mut(&mut self, path: impl AsRef<str>, content: impl Into<Vec<u8>>) -> Result<(), MapError>` | `Result<(), MapError>` | Enregistrement pour boucles |
+| `add_files` | `pub fn add_files<I, P, C>(&mut self, files: I) -> Result<(), MapError>` | `Result<(), MapError>` | Lot tout-ou-rien |
+| `add_path` | `pub fn add_path(&mut self, path: impl AsRef<Path>, content: impl Into<Vec<u8>>) -> Result<(), MapError>` | `Result<(), MapError>` | Enregistrement de chemin OS |
+| `len` / `is_empty` | `pub fn len(&self) -> usize` / `pub fn is_empty(&self) -> bool` | — | Fichiers enregistrés jusqu'ici |
+| `paths` | `pub fn paths(&self) -> impl Iterator<Item = &str>` | itérateur | Chemins enregistrés, dans l'ordre d'enregistrement |
+| `finalize` | `pub fn finalize(self) -> Result<SourceFilesMap<Id>, MapError>` | `Result<SourceFilesMap<Id>, MapError>` | Consomme le builder, renvoie la map |
+| `remaining_capacity` | `pub fn remaining_capacity(&self) -> usize` | `usize` | Combien de fichiers de plus le type d'id peut adresser |
+
+## Types de position
+
+### `AbsolutePosition<Id: FileId>`
+
+Un span dans un fichier source précis, compacté dans un seul `u64`. Alias : `CompactAbsolutePosition = AbsolutePosition<u8>`, `StandardAbsolutePosition = AbsolutePosition<u16>`.
+
+| Élément | Signature | Description |
+| ---- | --------- | ----------- |
+| `new` | `pub fn new(file_id: Id, start_line: u16, start_col: u8, end_line: u16, end_col: u8) -> Self` | Compactage infaillible et zéro-coût ; pas de validation |
+| `try_new` | `pub fn try_new(...) -> Result<Self, PositionError>` | Même compactage avec validation de plage |
+| `from_raw` | `pub fn from_raw(raw: u64) -> Option<Self>` | Reconstruit depuis l'encodage brut ; `None` pour des ids non représentables (y compris `0`) |
+| `as_raw` | `pub const fn as_raw(&self) -> u64` | Encodage brut stable |
+| `to_relative` | `pub fn to_relative(self) -> RelativePosition` | Retire l'id de fichier |
+| `file_id` | `pub fn file_id(&self) -> Id` | Composant id de fichier |
+| `Display` | `"{start_line}:{start_col}-{end_line}:{end_col}"` | `"2:5-2:22"` |
+| Dérivations | `Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash` + `serde` avec la fonctionnalité par défaut | L'ordre correspond à l'ordre lexicographique des spans |
+
+### `RelativePosition`
+
+Un span sans fichier compacté dans les 48 bits bas d'un `u64` ; les 16 bits hauts sont toujours à zéro.
+
+| Élément | Signature | Description |
+| ---- | --------- | ----------- |
+| `new` | `pub const fn new(start_line: u16, start_col: u8, end_line: u16, end_col: u8) -> Self` | Compactage const pour des items `const`/`static` |
+| `try_new` | `pub fn try_new(...) -> Result<Self, PositionError>` | Compactage validé |
+| `from_raw` | `pub const fn from_raw(raw: u64) -> Self` | Reconstruction const ; masque les 16 bits hauts |
+| `as_raw` | `pub const fn as_raw(&self) -> u64` | Encodage brut |
+| `to_absolute` | `pub fn to_absolute<Id: FileId>(self, file_id: Id) -> AbsolutePosition<Id>` | Attache un id de fichier |
+| `Display` | `"{start_line}:{start_col}-{end_line}:{end_col}"` | `"2:5-3:10"` |
+
+### `SourceFilePosition` (trait)
+
+Trait d'accesseur uniforme sur les deux sortes de positions, implémenté par `AbsolutePosition<Id>` et `RelativePosition`. Écrivez des helpers génériques contre lui :
+
+| Méthode | Signature | Renvoie |
+| ------ | --------- | ------- |
+| `source_file_id` | `fn source_file_id(&self) -> Option<u16>` | `None` pour les positions relatives |
+| `start_line` | `fn start_line(&self) -> u16` | Ligne de début à base un |
+| `start_column` | `fn start_column(&self) -> u8` | Colonne de début à base un |
+| `end_line` | `fn end_line(&self) -> u16` | Ligne de fin à base un |
+| `end_column` | `fn end_column(&self) -> u8` | Colonne de fin à base un |
+
+## Type d'id
+
+### `FileId` (trait scellé)
+
+Implémenté uniquement par `u8` et `u16` ; scellé, donc de nouvelles méthodes peuvent être ajoutées sans casser le code en aval. Constantes associées : `MAX_FILES`, `FILE_ID_BITS`, `FILE_ID_SHIFT`, `START_LINE_SHIFT`, `START_COL_SHIFT`, `END_LINE_SHIFT`, `END_COL_SHIFT`, `FILE_ID_MASK`, `LINE_MASK`, `COL_MASK`.
+
+| Méthode | Signature | Description |
+| ------ | --------- | ----------- |
+| `from_index` | `fn from_index(index: usize) -> Option<Self>` | `index 0 -> id 1` ; `None` hors plage |
+| `to_raw` | `fn to_raw(self) -> u64` | Valeur numérique brute |
+
+## Types de la fonctionnalité view
+
+### `LineOffsets`
+
+Index compact d'offsets d'octets par ligne, 4 octets par ligne, fichiers jusqu'à 4 GiB.
+
+| Méthode | Signature | Description |
+| ------ | --------- | ----------- |
+| `compute` | `pub fn compute(content: &[u8]) -> Result<Self, MapError>` | Construit l'index avec un seul scan `memchr` ; `FileTooLarge` au-delà de 4 GiB |
+| `line_count` | `pub fn line_count(&self) -> usize` | Nombre de lignes |
+| `content_length` | `pub fn content_length(&self) -> usize` | Longueur totale en octets |
+| `line_starts` | `pub fn line_starts(&self) -> &[u32]` | La liste brute d'offsets `u32` |
+| `line_range` | `pub fn line_range(&self, line: usize) -> Option<Range<usize>>` | Ligne à base un vers plage d'octets ; la ligne `0` se résout en `None` |
+| `line_col_from_offset` | `pub fn line_col_from_offset(&self, offset: usize) -> Option<(usize, usize)>` | Offset vers `(ligne, colonne)` à base un |
+| `offset_from_line_col` | `pub fn offset_from_line_col(&self, line: usize, col: usize) -> Option<usize>` | Mapping inverse |
+
+## Types de statistiques d'exécution
+
+### `RuntimeFeedback` :badge[rt-feedback]
+
+Statistiques d'usage sans verrou partagées entre maps via `Arc`.
+
+| Méthode | Signature | Description |
+| ------ | --------- | ----------- |
+| `new` | `pub fn new() -> Self` | Contexte vide |
+| `snapshot` | `pub fn snapshot(&self) -> FeedbackSnapshot` | Instantané immuable des compteurs |
+
+### `FeedbackSnapshot` :badge[rt-feedback]
+
+Instantané `Copy` avec champs publics `total_files: usize`, `total_bytes: u64`, `max_file_size: usize`, `usage_count: u64`. Les totaux décrivent la dernière finalisation ; `usage_count` s'accumule.
+
+### `PositionDisplay<'a>`
+
+Renderer `path:line:column` sans allocation créé par `display_position`. Implémente `Display` ; la chaîne est formatée paresseusement depuis des données empruntées.
+
+## Types d'itérateur
+
+`Iter<'a, Id>` — créé par `iter` et par l'`IntoIterator` de `&SourceFilesMap`. Produit `FileRef<'a, Id> { id: Id, path: &'a str, content: &'a [u8] }` et ne produit rien avant finalisation, parce que les ids n'existent qu'après.
+
+## Types d'erreur
+
+`MapError` et `PositionError` sont des énumérations `#[non_exhaustive]` ; voir [Erreurs](/reference/errors/) pour chaque variante avec ses champs.
+
+<Aside type="note">
+        Les signatures sont abrégées sur cette page : les bornes de trait comme
+        `Id: FileId` sont implicites, et les listes de paramètres longues sont
+        élidées avec `...` seulement là où le tableau de référence ci-dessus les
+        liste en entier.
+</Aside>
+
+## Étapes suivantes
+
+- Consultez <LinkCard title="Encodage des positions" href="/reference/position-encoding/" /> pour les layouts de bits derrière `as_raw`.
+- Consultez <LinkCard title="Drapeaux de fonctionnalité" href="/reference/feature-flags/" /> pour ce que chaque badge sur cette page signifie.
+- Parcourez [docs.rs/sourcier](https://docs.rs/sourcier) pour l'API générée par rustdoc.

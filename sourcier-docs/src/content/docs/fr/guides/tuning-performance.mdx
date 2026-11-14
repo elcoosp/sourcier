@@ -1,0 +1,79 @@
+---
+title: Ajuster la performance
+description: "Pré-réservez la capacité, choisissez le bon type d'id, optez pour la construction d'index parallèle et retirez des fonctionnalités pour des builds plus rapides et des binaires plus légers."
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Utilisez ce guide quand les maps grossissent, quand la finalisation apparaît dans les profils, ou quand la taille du binaire compte. Les chiffres cités ici viennent de la suite criterion embarquée (`cargo bench -p sourcier-core`) sur la machine de référence, comparant 2.0 au baseline 1.0 ; traitez-les comme indicatifs.
+
+## Pré-réserver la capacité
+
+La map et le builder acceptent tous deux un nombre attendu de fichiers, ce qui pré-réserve le stockage et réduit les réallocations pendant la construction :
+
+<Code lang="rust" code={`use sourcier::SourceFilesBuilder;
+
+let builder = SourceFilesBuilder::<u16>::with_capacity(4_096);
+assert_eq!(builder.remaining_capacity(), 65_535);`} />
+
+## Choisir le plus petit type d'id qui tient
+
+Le type d'id définit à la fois la capacité et l'encodage compacté :
+
+| Type d'id | Fichiers max | Bits d'id de fichier | Idéal pour |
+| ------- | --------- | ------------ | -------- |
+| `u8`    | 255       | 8            | Outils mono-crate, tests, petites bases de code |
+| `u16`   | 65 535    | 16           | Serveurs de langage, monorepos, indexeurs |
+
+Les types d'id plus petits laissent plus de bits aux autres champs du `u64` compacté, et les positions `u8` sont l'alias `CompactAbsolutePosition` que préfèrent de nombreux caches de diagnostic.
+
+## Opter pour la construction d'index parallèle
+
+Les index d'offsets de ligne sont construits avec un seul scan accéléré par `memchr` par défaut. La fonctionnalité opt-in `parallel` étale ce scan sur les cœurs avec `rayon` pour d'immenses ensembles de fichiers :
+
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", features = ["parallel"] }`} />
+
+<Aside type="note">
+	Sur une VM de référence à 2 cœurs, le surcoût du pool de threads a dépassé les économies du scan, ce qui explique pourquoi la fonctionnalité est opt-in. Activez-la sur les machines de build à plusieurs cœurs où les ensembles de fichiers sont grands.
+</Aside>
+
+## Retirer des fonctionnalités pour un build plus léger
+
+Les fonctionnalités par défaut tirent `serde`, `view` et `rt-feedback`. Désactivez ce que votre outil n'utilise pas :
+
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
+
+Chaque fonctionnalité retirée retire du code du binaire et du travail du build ; voir [Drapeaux de fonctionnalité](/reference/feature-flags/) pour ce que chacun conditionne.
+
+## Savoir quels sont les coûts
+
+Scénarios mesurés de la suite de benchmarks embarquée :
+
+| Scénario | 1.0 | 2.0 | Changement |
+| -------- | --- | --- | ------ |
+| Finaliser 100 fichiers × 50 lignes | ~64 us | ~41 us | **-35 %** |
+| Finaliser 500 fichiers × 100 lignes | ~709 us | ~513 us | **-28 %** |
+| Phase de finalisation seule, 2 000 × 200 lignes | ~3,7 ms | ~2,8 ms | **-25 %** |
+| 1 000 extractions `view` multi-lignes | ~14,4 us | ~4,4 us | **-70 %** |
+| Offsets de ligne pour 100 fichiers × 1 000 lignes | ~0,79 ms | ~0,69 ms | **-12 %** |
+| 1 000 sondes offset-vers-(ligne, col) | — | ~8,2 us | nouveau |
+| Span `view_str` mono-ligne | — | ~257 ns | nouveau |
+| 2 000 lookups path-vers-id (hits) | ~34 us | ~41 us | voir note |
+| 2 000 lookups path-vers-id (misses) | — | ~33 us | nouveau |
+
+L'index path-vers-id de la 2.0 échange un peu de latence de hit (~20 %) contre une vérification octet pour octet, un amorçage par map résistant au HashDoS, zéro allocation à la finalisation et environ la moitié de la mémoire d'état de lookup. Les hits et les misses se terminent tous deux au premier slot vide, donc les misses sont aussi bon marché que les hits. La justification de conception vit dans [Conception pour la performance](/explanation/performance-design/).
+
+## Épingler les coûts en CI
+
+Les pistes de benchmark pour le builder, le pont d'offsets et les lookups font partie du dépôt, donc vous pouvez épingler les coûts dont dépend votre outil :
+
+<Code lang="bash" code={`cargo bench -p sourcier-core`} />
+
+## Étapes suivantes
+
+- Lisez <LinkCard title="Conception pour la performance" href="/explanation/performance-design/" /> pour la justification des structures de données derrière les chiffres.
+- Suivez <LinkCard title="Enregistrer des fichiers source" href="/guides/registering-files/" /> pour les API de capacité utilisées ci-dessus.
+- Consultez <LinkCard title="Drapeaux de fonctionnalité" href="/reference/feature-flags/" /> avant de retirer davantage.

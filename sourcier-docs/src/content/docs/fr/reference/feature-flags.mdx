@@ -1,0 +1,57 @@
+---
+title: Drapeaux de fonctionnalité
+description: "Ce que les fonctionnalités Cargo serde, view, rt-feedback et parallel conditionnent, leurs défauts et comment les retirer."
+type: reference
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Toutes les fonctionnalités sont activées par défaut et transmises à la crate moteur `sourcier-core`. Vous ne configurez les fonctionnalités que sur la façade `sourcier`.
+
+| Fonctionnalité | Défaut | Conditionne |
+| ------- | ------- | ----- |
+| `serde` | oui | `Serialize`/`Deserialize` pour les maps, les positions et `FeedbackSnapshot` ; chargement du format filaire |
+| `view` | oui | `LineOffsets`, `view`, `view_str`, `line_offsets`, `position_from_offset`, `offset_from_position`, `display_position` |
+| `rt-feedback` | oui | `RuntimeFeedback`, `FeedbackSnapshot`, `with_feedback` sur la map et le builder |
+| `parallel` | non | Construction multi-threadée de l'index d'offsets de ligne avec `rayon` |
+
+## Ce que chaque fonctionnalité signifie pour votre build
+
+`serde` ajoute les dérivations de sérialisation et la logique de compatibilité des payloads. Les outils qui gardent les positions uniquement en mémoire peuvent la retirer.
+
+`view` ajoute l'index de lignes par fichier (un seul scan accéléré par `memchr`, 4 octets par ligne) et chaque API d'extraction d'octets et de pont d'offsets. Les outils de diagnostic la gardent presque toujours ; les registres purs d'ids peuvent la retirer.
+
+`rt-feedback` ajoute des compteurs atomiques derrière un `Arc<RuntimeFeedback>`. Aucun verrou n'est pris sur le chemin de rapport ; le coût quand elle n'est pas utilisée est le chemin de code inutilisé.
+
+`parallel` est opt-in parce que sur une VM de référence à 2 cœurs, le surcoût du pool de threads a dépassé les économies du scan. Activez-la sur les machines de build à plusieurs cœurs traitant de grands ensembles de fichiers ; elle ajoute la dépendance `rayon`.
+
+## Recettes de retrait
+
+Garder seulement l'extraction d'octets :
+
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
+
+Garder la sérialisation sans vues ni statistiques :
+
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["serde"] }`} />
+
+Tout activer, y compris le parallélisme :
+
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", features = ["parallel"] }`} />
+
+<Aside type="caution">
+	Désactiver une fonctionnalité retire ses API de la crate compilée : du code qui appelle `view` avec `default-features = false` échoue à compiler. Cargo unifie les fonctionnalités à travers votre graphe de dépendances, donc une autre crate de l'arbre peut réactiver une fonctionnalité que vous avez retirée.
+</Aside>
+
+## MSRV par configuration
+
+La version minimale supportée de Rust est 1.99 pour chaque configuration de fonctionnalité ; la CI vérifie `cargo check` à travers les combinaisons de fonctionnalités.
+
+## Étapes suivantes
+
+- Suivez <LinkCard title="Installation" href="/guides/installation/" /> pour les commandes d'installation derrière ces extraits.
+- Suivez <LinkCard title="Ajuster la performance" href="/guides/tuning-performance/" /> pour décider entre `parallel` et le scan par défaut.
+- Consultez la <LinkCard title="Surface d'API" href="/reference/api/" /> pour les éléments que chaque fonctionnalité conditionne.

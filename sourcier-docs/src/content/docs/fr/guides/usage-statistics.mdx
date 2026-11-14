@@ -1,0 +1,85 @@
+---
+title: Partager des statistiques d'usage
+description: "Observez l'activité de finalisation à travers les maps et les threads avec le contexte RuntimeFeedback sans verrou."
+type: how-to
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Utilisez ce guide pour collecter des statistiques d'usage quand votre outil construit beaucoup de maps de fichiers source. Tout sur cette page nécessite la fonctionnalité par défaut `rt-feedback`. Le contexte est sans verrou : finaliser une map met à jour les compteurs avec des opérations atomiques, donc plusieurs maps et threads peuvent rapporter dans le même contexte sans bloquer.
+
+## Créer un contexte de feedback partagé
+
+Créez un `RuntimeFeedback`, enveloppez-le dans un `Arc` et remettez-le à la map :
+
+<Code lang="rust" code={`use std::sync::Arc;
+
+use sourcier::{RuntimeFeedback, SourceFilesMap};
+
+let feedback = Arc::new(RuntimeFeedback::new());
+
+let mut files = SourceFilesMap::<u8>::with_feedback(Arc::clone(&feedback));
+files.add_file("a.rs", b"fn a() {}").expect("capacity available");
+files.finalize().expect("no capacity issue");`} />
+
+Les builders acceptent le même contexte via `SourceFilesBuilder::with_feedback`.
+
+## Lire un instantané
+
+`snapshot` renvoie un instantané immuable et `Copy` des compteurs :
+
+<Code lang="rust" code={`let snapshot = feedback.snapshot();
+
+assert_eq!(snapshot.total_files, 1);
+assert_eq!(snapshot.total_bytes, 9);
+assert_eq!(snapshot.max_file_size, 9);
+assert_eq!(snapshot.usage_count, 1);`} />
+
+Les champs de l'instantané :
+
+| Champ | Signification |
+| ----- | ------- |
+| `total_files` | Nombre de fichiers enregistrés par la dernière map finalisée |
+| `total_bytes` | Total d'octets de contenu enregistrés par la dernière map finalisée |
+| `max_file_size` | Taille en octets du plus gros fichier de la dernière map finalisée |
+| `usage_count` | Nombre de finalisations qui ont rapporté dans ce contexte |
+
+<Aside type="note">
+	Chaque finalisation réussie **écrase** les totaux par map (`total_files`, `total_bytes`, `max_file_size`) avec les valeurs de cette map et **incrémente** `usage_count`. Les totaux décrivent donc la dernière finalisation, pas la somme de toutes les finalisations.
+</Aside>
+
+## Rapporter depuis plusieurs threads
+
+Le chemin de rapport ne prend aucun verrou, donc les threads ne se disputent que des instructions atomiques. Partagez l'`Arc` entre les workers et lisez les compteurs quand vous en avez besoin :
+
+<Code lang="rust" code={`use std::sync::Arc;
+
+use sourcier::{RuntimeFeedback, SourceFilesBuilder};
+
+let feedback = Arc::new(RuntimeFeedback::new());
+
+let handles: Vec<_> = (0..4)
+    .map(|i| {
+        let feedback = Arc::clone(&feedback);
+        std::thread::spawn(move || {
+            let mut files = SourceFilesBuilder::<u8>::with_feedback(feedback);
+            files
+                .add_file(format!("{i}.rs"), b"fn x() {}")
+                .expect("capacity available");
+            files.finalize().expect("no capacity issue");
+        })
+    })
+    .collect();
+
+for handle in handles {
+    handle.join().expect("worker finished");
+}
+
+assert_eq!(feedback.snapshot().usage_count, 4);`} />
+
+Avec la fonctionnalité par défaut `serde`, `FeedbackSnapshot` implémente aussi `Serialize` et `Deserialize`, donc vous pouvez journaliser ou persister les instantanés directement.
+
+## Étapes suivantes
+
+- Suivez <LinkCard title="Enregistrer des fichiers source" href="/guides/registering-files/" /> pour l'API d'enregistrement qu'observent les compteurs.
+- Consultez la <LinkCard title="Surface d'API" href="/reference/api/" /> pour les signatures complètes de `RuntimeFeedback` et `FeedbackSnapshot`.

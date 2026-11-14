@@ -1,0 +1,69 @@
+---
+title: Installation
+description: "Ajoutez Sourcier à un projet Rust depuis crates.io ou Git, vérifiez le MSRV et retirez des drapeaux de fonctionnalité pour un build plus léger."
+type: how-to
+---
+
+import { Aside, Code, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Utilisez ce guide pour ajouter Sourcier à un projet Rust existant et configurer ses drapeaux de fonctionnalité. Sourcier supporte Rust 1.99 et plus (Édition 2024) ; le MSRV est vérifié en CI à travers les configurations de fonctionnalité.
+
+## Ajouter la dépendance
+
+<Tabs>
+	<TabItem label="cargo add">
+		<Code lang="bash" code={`cargo add sourcier`} />
+
+		Cargo ajoute la dernière version `2.0` et active les fonctionnalités par défaut.
+	</TabItem>
+	<TabItem label="Cargo.toml">
+		<Code lang="toml" code={`[dependencies]
+sourcier = "2.0"`} />
+	</TabItem>
+</Tabs>
+
+Vous ne dépendez jamais que de `sourcier`. Elle ré-exporte toute l'API de la crate moteur `sourcier-core`, qui existe pour que l'implémentation reste petite et la façade stable.
+
+<Aside type="note">
+	Vous préférez une dépendance vivante ? Suivez le dépôt directement :
+
+	<Code lang="toml" code={`[dependencies]
+sourcier = { git = "https://github.com/elcoosp/sourcier", branch = "main" }`} />
+</Aside>
+
+## Vérifier l'installation
+
+Compilez un programme de trois lignes qui touche l'API publique :
+
+<Code lang="rust" code={`use sourcier::{SourceFilesBuilder, SourceFilesMap};
+
+let files = SourceFilesBuilder::<u8>::new()
+    .add_file("a.rs", b"fn a() {}")
+    .expect("capacity available")
+    .finalize()
+    .expect("no capacity issue");
+
+let _: &str = files.get_path(1).expect("file present");`} />
+
+<Code lang="bash" code={`cargo build`} />
+
+Un build réussi n'imprime rien. Toute erreur `unresolved import` signifie que la dépendance n'a pas été résolue — vérifiez que `Cargo.lock` contient `sourcier`.
+
+## Retirer des drapeaux de fonctionnalité
+
+Toutes les fonctionnalités sauf `parallel` sont activées par défaut et transmises à `sourcier-core`. Désactivez celles dont vous n'avez pas besoin pour un build plus léger :
+
+<Code lang="toml" code={`[dependencies]
+sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
+
+Cela garde l'index d'offsets de ligne et l'extraction d'octets tout en retirant la sérialisation et les statistiques d'exécution. Voir [Drapeaux de fonctionnalité](/reference/feature-flags/) pour la matrice complète et ce que chaque fonctionnalité conditionne.
+
+<Aside type="caution">
+	Désactiver `view` retire `view`, `view_str`, `position_from_offset`, `offset_from_position` et `display_position`. Le code qui les appelle échoue à compiler jusqu'à ce que vous réactiviez la fonctionnalité.
+</Aside>
+
+## Étapes suivantes
+
+- Suivez <LinkCard title="Votre première source map" href="/tutorials/getting-started/" /> pour le flux de travail complet.
+- Suivez <LinkCard title="Enregistrer des fichiers source" href="/guides/registering-files/" /> pour mettre la dépendance au travail.
+- Consultez <LinkCard title="Drapeaux de fonctionnalité" href="/reference/feature-flags/" /> avant de retirer davantage.

@@ -1,0 +1,56 @@
+---
+title: Sourcier
+description: "Cartographie compacte et efficace de fichiers source et suivi de positions pour Rust — enregistrez les fichiers une fois, compactez chaque span dans un seul u64."
+template: splash
+type: explanation
+hero:
+  title: "Sourcier"
+  tagline: "Cartographie compacte et efficace de fichiers source et suivi de positions pour Rust. Enregistrez les fichiers source une fois, distribuez des ids numériques stables, et compactez chaque span — id de fichier, ligne et colonne — dans un seul `u64`."
+  image:
+    file: ../../../assets/logo.png
+    alt: "Le logo de Sourcier — trois couches empilées reliées par un chemin lumineux"
+  actions:
+    - text: Commencer le tutoriel
+      link: /tutorials/getting-started/
+      icon: right-arrow
+    - text: Installation
+      link: /guides/installation/
+      icon: external
+    - text: Référence de l'API
+      link: /reference/api/
+      icon: external
+---
+
+import { Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
+
+Sourcier est conçu pour les outils riches en diagnostics — compilateurs, linters, formateurs, serveurs de langage et éditeurs de code — qui ont besoin de positions bon marché à construire, comparer, stocker et sérialiser, tout en se résolvant vers les octets exacts du fichier qu'elles pointent. Au lieu de trimballer des chemins `String` et quatre champs `usize` à travers chaque diagnostic, vous compactez tout le span dans un seul `u64` et gardez les données lourdes dans un seul registre immuable.
+
+## Choisissez votre chemin
+
+<CardGrid stagger>
+	<Card title="Apprendre le chemin doré">
+		Suivez le tutoriel pour enregistrer des fichiers, finaliser une map et extraire les octets exacts d'un span en une dizaine de minutes.
+		<LinkCard title="Votre première source map" href="/tutorials/getting-started/" />
+	</Card>
+	<Card title="Résoudre une tâche précise">
+		Des guides orientés tâche couvrent l'installation, l'enregistrement, les positions compactées, les vues d'octets, les statistiques partagées, les erreurs et l'ajustement de performance.
+		<LinkCard title="Parcourir les guides pratiques" href="/guides/installation/" />
+	</Card>
+	<Card title="Consulter quelque chose">
+		Les pages de référence documentent la surface complète de l'API, les layouts de bits `u64` stables, les drapeaux de fonctionnalité et chaque variante d'erreur.
+		<LinkCard title="Ouvrir la référence" href="/reference/api/" />
+	</Card>
+	<Card title="Comprendre la conception">
+		Les pages d'explication parcourent le cycle de vie à deux phases, l'index de chemins vérifié et les garanties de sûreté qui façonnent l'API.
+		<LinkCard title="Lire les notes de conception" href="/explanation/why-sourcier/" />
+	</Card>
+</CardGrid>
+
+<LinkButton href="/tutorials/getting-started/" icon="right-arrow">Commencer le tutoriel</LinkButton>
+
+## Points forts
+
+- **Un `u64` par span.** L'id de fichier, la ligne de début, la colonne de début, la ligne de fin et la colonne de fin sont compactés ensemble. Les positions sont `Copy`, favorables au cache, s'ordonnent naturellement comme des entiers et survivent aux allers-retours de sérialisation octet pour octet.
+- **Lookups à temps constant.** Après finalisation, path vers id, id vers path et id vers content sont tous O(1) ; la navigation ligne et colonne est O(log n).
+- **Vues précises à l'octet.** Avec la fonctionnalité par défaut `view`, une position se résout vers les octets exacts qu'elle couvre, y compris les spans multi-lignes et les terminateurs de ligne.
+- **Pas de code unsafe.** Tout l'espace de travail est `#![forbid(unsafe_code)]`, les énumérations d'erreur sont `#[non_exhaustive]`, et le trait `FileId` est scellé.

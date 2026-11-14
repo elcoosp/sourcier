@@ -1,0 +1,59 @@
+---
+title: Le cycle de vie à deux phases
+description: "Pourquoi SourceFilesMap se scinde en une phase de construction mutable et une phase de lookup immuable, et comment le builder à état de type impose la frontière."
+type: explanation
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Chaque `SourceFilesMap` vit à travers deux phases : une **phase de construction** mutable où les fichiers sont enregistrés, et une **phase de lookup** immuable où les ids existent et où les requêtes tournent en temps constant. La frontière de phase est l'appel `finalize`, et c'est elle qui permet aux deux phases d'être rapides.
+
+## La phase de construction
+
+Pendant la phase de construction, la map est un registre en append-only. `add_file`, `add_files` et `add_path` ajoutent des entrées — chemin, contenu et ordre d'enregistrement — sans faire aucun tri, hashing ni construction d'index. Rien des ids n'existe encore : les ids sont une sortie de la finalisation, pas une entrée.
+
+Cela garde l'enregistrement aussi bon marché que possible. Un outil qui découvre des fichiers en parcourant une arborescence, ou qui ingère des fichiers depuis un client de serveur de langage, ne paie que le coût de stocker chaque entrée.
+
+## Ce que fait la finalisation
+
+`finalize` effectue trois étapes dans une seule structure de passe :
+
+1. **Trier.** Les entrées sont triées par chemin avec un seul tri instable. Les égalités — les entrées qui ont enregistré le même chemin — conservent l'ordre d'enregistrement.
+2. **Dédupliquer.** Pour les chemins en double, le premier enregistrement gagne et les suivants sont abandonnés. La règle tient de façon déterministe même à l'échelle de centaines de doublons, ce que les tests de propriété épinglent.
+3. **Assigner les ids.** Les fichiers reçoivent des ids à base un dans l'ordre trié des chemins, donc le même ensemble de fichiers produit toujours les mêmes ids.
+
+La finalisation est sans allocation pour les arborescences source typiques : les chemins jusqu'à 30 octets vivent inline dans leurs entrées, le contenu des fichiers n'est jamais copié, et l'index de lookup est construit sur les chemins déjà stockés. Après l'appel, la map est immuable.
+
+## La phase de lookup
+
+L'immuabilité est l'astuce de performance. Parce que l'ensemble d'entrées ne peut pas changer après la finalisation, l'index de chemins peut être une table de hash ouvert-adressée vérifiée dimensionnée une fois, sans pierres tombales, sans re-hashing et sans synchronisation de mutation. `get_id`, `get_path`, `get_content` et `get` tournent en temps constant ; la navigation ligne et colonne tourne en O(log n) sur l'index de lignes par fichier.
+
+Itérer une map avant la finalisation ne produit rien : `Iter` filtre sur le drapeau de phase parce que les ids n'existent qu'après.
+
+<Aside type="note">
+	Les payloads sérialisés ne portent que les entrées brutes et le drapeau de phase. L'état de lookup est reconstruit au chargement, donc une map désérialisée se comporte exactement comme une map finalisée.
+</Aside>
+
+## Pourquoi le builder existe
+
+La map brute suit sa phase à l'exécution et rapporte les erreurs comme erreurs : `MapError::Finalized` quand vous mutez après finalisation, `MapError::AlreadyFinalized` quand vous finalisez deux fois. Ces erreurs font partie de l'API pour les outils qui doivent garder une map à travers les deux phases.
+
+`SourceFilesBuilder` retire ces erreurs au niveau du type. Il enveloppe une map en phase de construction et n'expose que l'API d'enregistrement, donc la mutation après finalisation ne peut pas être exprimée, et son `finalize` consomme le builder et renvoie une map déjà dans sa phase de lookup :
+
+<Code lang="rust" code={`use sourcier::SourceFilesBuilder;
+
+let files = SourceFilesBuilder::<u8>::new()
+    .add_file("src/main.rs", b"fn main() {}")
+    .expect("capacity available")
+    .add_file("src/lib.rs", b"pub mod utils;")
+    .expect("capacity available")
+    .finalize()
+    .expect("no capacity issue");`} />
+
+Les erreurs de phase sont non représentables à travers le builder ; le compilateur impose le cycle de vie. Choisissez le builder quand le cycle de vie est linéaire — enregistrer, finaliser, puis interroger — et la map brute quand un outil déplace légitimement une seule map entre phases.
+
+## Étapes suivantes
+
+- Suivez <LinkCard title="Enregistrer des fichiers source" href="/guides/registering-files/" /> pour les recettes d'enregistrement qu'offre la phase de construction.
+- Lisez <LinkCard title="Conception pour la performance" href="/explanation/performance-design/" /> pour l'index vérifié que la finalisation construit.
+- Consultez la <LinkCard title="Surface d'API" href="/reference/api/" /> pour les signatures exactes des deux phases.
