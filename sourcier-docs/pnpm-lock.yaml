@@ -66,8 +66,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0(@astrojs/starlight@0.42.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(astro@7.4.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))
       starlight-view-modes:
-        specifier: ^0.15.4
-        version: 0.15.4(@astrojs/starlight@0.42.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(astro@7.4.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2)
+        specifier: ^0.16.0
+        version: 0.16.0(@astrojs/starlight@0.42.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(astro@7.4.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2)
     devDependencies:
       '@astrojs/check':
         specifier: 0.9.12
@@ -3001,6 +3001,12 @@ packages:
     engines: {node: '>=22.12.0'}
     peerDependencies:
       '@astrojs/starlight': '>=0.42.0'
+
+  starlight-view-modes@0.16.0:
+    resolution: {integrity: sha512-kzE/WZGPRBVCdLQYueXmaArEMwEGtLPr0+j15099PA3wk1fhwDwceBj4kZhFVr5n5ZWTrJqDYGSPwpr/AD+CYA==}
+    engines: {node: '>=22.12.0'}
+    peerDependencies:
+      '@astrojs/starlight': '>=0.43.0'
 
   std-env@4.3.0:
     resolution: {integrity: sha512-OtU/EgQ1kIm5KwqQpBC6ZEMXrZRui11w8zgfTWp8cdO9B8OaPsbA8bTHO2P+HNo1VlUTGMVBwPhydu6poeXiag==}
@@ -7024,6 +7030,21 @@ snapshots:
       zod: 4.6.7
 
   starlight-view-modes@0.15.4(@astrojs/starlight@0.42.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(astro@7.4.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2):
+    dependencies:
+      '@astrojs/markdown-remark': 7.3.9(supports-color@10.2.2)
+      '@astrojs/starlight': 0.42.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(astro@7.4.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3)
+      '@pagefind/default-ui': 1.6.0
+      hast-util-from-html: 2.1.0
+      hast-util-to-html: 9.0.6
+      mdast-util-mdx-expression: 2.0.1(supports-color@10.2.2)
+      picomatch: 4.0.7
+      reveal.js: 6.0.2
+      satteri: 0.10.5
+      unist-util-visit: 5.2.0
+    transitivePeerDependencies:
+      - supports-color
+
+  starlight-view-modes@0.16.0(@astrojs/starlight@0.42.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(astro@7.4.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(supports-color@10.2.2):
     dependencies:
       '@astrojs/markdown-remark': 7.3.9(supports-color@10.2.2)
       '@astrojs/starlight': 0.42.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(astro@7.4.11(@astrojs/markdown-remark@7.3.9(supports-color@10.2.2))(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3)
