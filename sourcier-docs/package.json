@@ -30,7 +30,7 @@
     "starlight-llms-txt": "^0.12.0",
     "starlight-scroll-to-top": "^2.0.0",
     "starlight-seo": "^1.0.0",
-    "starlight-telescope": "^1.0.0",
+    "starlight-telescope": "^2.0.0",
     "starlight-view-modes": "^0.15.4",
     "starlight-links-validator": "^0.27.0"
   },
