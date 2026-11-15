@@ -1,0 +1,54 @@
+---
+title: Packing source file IDs, lines, and columns into a single u64
+date: 2026-11-15
+cover:
+  alt: Sourcier Architecture
+  image: ./welcome-cover.jpg
+image: ./welcome-cover.jpg
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+In compilers, linters, and macro expanders, every AST node and token carries a source span. When spans hold `PathBuf` clones or heap-allocated file names, memory usage climbs fast and passing locations across threads gets noisy.
+
+Sourcier (`0.1`) registers each source file once and packs the file ID, line, and column into a single `Copy` `u64`.
+
+## The Goal
+
+We needed a lightweight source map for diagnostics-heavy Rust tools that hands out compact numeric file IDs, resolves 1-based line and column coordinates on demand, and lets spans sit inside AST nodes without lifetimes or heap allocations.
+
+## How it works
+
+A central source registry interns each file path and content buffer once, returning a compact `FileId`. Every `Span` bit-packs that ID alongside line and column offsets into one 64-bit integer.
+
+<CardGrid stagger>
+  <Card title="64-Bit Packed Spans" icon="rocket">
+    File ID, line, and column fit inside one `u64` (`Copy`, `Eq`, `Hash`), adding zero heap allocations per AST node.
+  </Card>
+  <Card title="Single File Registration" icon="puzzle">
+    Paths and source text are stored once in the source map rather than duplicated across tokens and diagnostics.
+  </Card>
+  <Card title="On-Demand Line Lookup" icon="setting">
+    Byte offsets map back to 1-based line and column coordinates only when formatting an error message.
+  </Card>
+  <Card title="Lifetime-Free ASTs" icon="approve-check">
+    Because spans are plain integers rather than `&str` slices, syntax trees can move across threads and crates cleanly.
+  </Card>
+</CardGrid>
+
+## What it cost
+
+Packing file IDs, lines, and columns into 64 bits means trading arbitrary integer width for fixed bit budgets. We had to define explicit bit widths for each field so standard source files pack without overflow while still catching out-of-range coordinates cleanly.
+
+<Aside type="caution" title="Where this does not apply">
+Because coordinates are bit-packed into a fixed `u64` layout, Sourcier is designed for normal source files rather than multi-gigabyte generated blobs with millions of lines in a single file. If your input exceeds the bit budget of a field, use full `usize` byte ranges instead.
+</Aside>
+
+## Getting started
+
+```toml
+[dependencies]
+sourcier = "0.1"
+```
+
+Check the [getting started tutorial](/tutorials/getting-started/) and [API reference](/reference/api/) to register files and attach packed spans to your diagnostics.
