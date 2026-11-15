@@ -6,3 +6,7 @@ lcov.info
 /target-release
 .vercel
 .env*
+
+# Build-time backups
+*.bak
+*.orig
