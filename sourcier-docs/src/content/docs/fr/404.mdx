@@ -1,0 +1,18 @@
+---
+title: Page introuvable
+description: "La page demandée n'existe pas dans la documentation de Sourcier."
+draft: true
+head:
+  - tag: style
+    content: ".content-panel .sl-container > p.sl-flex { display: none; }"
+---
+
+import { LinkCard } from "@astrojs/starlight/components";
+
+La page demandée n'existe pas. Utilisez la barre latérale ou la fenêtre de recherche
+pour trouver ce que vous cherchez, ou repartez de l'un des points d'entrée
+ci-dessous :
+
+- <LinkCard title="Vue d'ensemble" href="/fr/" />
+- <LinkCard title="Votre première carte des sources" href="/fr/tutorials/getting-started/" />
+- <LinkCard title="Surface d'API" href="/fr/reference/api/" />

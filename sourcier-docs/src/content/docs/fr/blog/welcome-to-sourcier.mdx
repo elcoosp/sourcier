@@ -1,0 +1,54 @@
+---
+title: Compacter les identifiants de fichiers sources, lignes et colonnes dans un seul u64
+date: 2026-11-15
+cover:
+  alt: Architecture de Sourcier
+  image: ../../blog/welcome-cover.jpg
+image: ../../blog/welcome-cover.jpg
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+Dans les compilateurs, linters et expanseurs de macros, chaque nœud d'AST et chaque jeton porte un span source. Lorsque les spans conservent des clones de `PathBuf` ou des noms de fichiers alloués sur le tas, la consommation mémoire grimpe rapidement et le passage des emplacements entre threads devient lourd.
+
+Sourcier (`0.1`) enregistre chaque fichier source une seule fois et compacte l'identifiant du fichier, la ligne et la colonne dans un unique `u64` `Copy`.
+
+## L'objectif
+
+Nous avions besoin d'une carte des sources légère pour les outils Rust riches en diagnostics, capable d'attribuer des identifiants numériques compacts de fichiers, de résoudre à la demande les coordonnées ligne et colonne indexées à partir de 1, et de loger les spans dans les nœuds d'AST sans durées de vie ni allocations sur le tas.
+
+## Fonctionnement
+
+Un registre central des sources interne chaque chemin de fichier et tampon de contenu une seule fois, renvoyant un `FileId` compact. Chaque `Span` compacte au niveau des bits cet identifiant avec les décalages de ligne et de colonne dans un seul entier de 64 bits.
+
+<CardGrid stagger>
+  <Card title="Spans compactés sur 64 bits" icon="rocket">
+    L'identifiant de fichier, la ligne et la colonne tiennent dans un seul `u64` (`Copy`, `Eq`, `Hash`), sans aucune allocation sur le tas par nœud d'AST.
+  </Card>
+  <Card title="Enregistrement unique des fichiers" icon="puzzle">
+    Les chemins et le texte source sont stockés une seule fois dans la carte des sources plutôt que dupliqués à travers les jetons et diagnostics.
+  </Card>
+  <Card title="Recherche de ligne à la demande" icon="setting">
+    Les décalages d'octets sont reconvertis en coordonnées ligne et colonne base 1 uniquement lors du formatage d'un message d'erreur.
+  </Card>
+  <Card title="AST sans durées de vie" icon="approve-check">
+    Comme les spans sont de simples entiers plutôt que des tranches `&str`, les arbres syntaxiques circulent proprement entre threads et crates.
+  </Card>
+</CardGrid>
+
+## Ce que cela a coûté
+
+Compacter les identifiants de fichiers, les lignes et les colonnes sur 64 bits implique d'échanger une largeur d'entiers arbitraire contre des budgets de bits fixes. Nous avons dû définir des largeurs de bits explicites pour chaque champ afin que les fichiers sources standards soient compactés sans débordement tout en interceptant proprement les coordonnées hors limites.
+
+<Aside type="caution" title="Cas où cela ne s'applique pas">
+Puisque les coordonnées sont compactées par bits dans une disposition fixe `u64`, Sourcier est conçu pour des fichiers sources normaux plutôt que pour des blobs générés de plusieurs gigaoctets contenant des millions de lignes dans un seul fichier. Si votre entrée dépasse le budget de bits d'un champ, utilisez plutôt des plages complètes d'octets `usize`.
+</Aside>
+
+## Démarrer
+
+```toml
+[dependencies]
+sourcier = "0.1"
+```
+
+Consultez le [tutoriel de démarrage](/fr/tutorials/getting-started/) et la [référence API](/fr/reference/api/) pour enregistrer des fichiers et attacher des spans compactés à vos diagnostics.
