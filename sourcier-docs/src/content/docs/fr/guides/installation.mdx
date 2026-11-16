@@ -12,7 +12,7 @@ Utilisez ce guide pour ajouter Sourcier à un projet Rust existant et configurer
 
 <Tabs>
 	<TabItem label="cargo add">
-		<Code lang="bash" code={`cargo add sourcier`} />
+		<Code lang="bash" title="Terminal" code={`cargo add sourcier`} />
 
 		Cargo ajoute la dernière version `2.0` et active les fonctionnalités par défaut.
 	</TabItem>
@@ -45,7 +45,7 @@ let files = SourceFilesBuilder::<u8>::new()
 
 let _: &str = files.get_path(1).expect("file present");`} />
 
-<Code lang="bash" code={`cargo build`} />
+<Code lang="bash" title="Terminal" code={`cargo build`} />
 
 Un build réussi n'imprime rien. Toute erreur `unresolved import` signifie que la dépendance n'a pas été résolue — vérifiez que `Cargo.lock` contient `sourcier`.
 

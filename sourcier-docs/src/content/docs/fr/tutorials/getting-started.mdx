@@ -18,12 +18,12 @@ Ce tutoriel vous emmène à travers le chemin doré de Sourcier : enregistrer de
 <Steps>
 1. Créez une nouvelle crate binaire et entrez dedans :
 
-	<Code lang="bash" code={`cargo new span-demo
+	<Code lang="bash" title="Terminal" code={`cargo new span-demo
 cd span-demo`} />
 
 2. Ajoutez Sourcier comme dépendance :
 
-	<Code lang="bash" code={`cargo add sourcier`} />
+	<Code lang="bash" title="Terminal" code={`cargo add sourcier`} />
 
 	Cargo ajoute la version `2.0` courante à `Cargo.toml`.
 
@@ -36,7 +36,7 @@ Sourcier utilise un cycle de vie à deux phases : vous enregistrez d'abord les f
 
 Ajoutez ce code à `src/main.rs` :
 
-<Code lang="rust" code={`use sourcier::SourceFilesMap;
+<Code lang="rust" title="src/main.rs" code={`use sourcier::SourceFilesMap;
 
 fn main() {
     // Les ids u8 supportent jusqu'à 255 fichiers ; u16 en supporte 65 535.
@@ -57,7 +57,7 @@ fn main() {
 
 Exécutez le programme :
 
-<Code lang="bash" code={`cargo run`} />
+<Code lang="bash" title="Terminal" code={`cargo run`} />
 
 Vous voyez la sortie attendue :
 

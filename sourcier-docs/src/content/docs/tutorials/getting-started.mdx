@@ -23,12 +23,12 @@ minutes.
 <Steps>
 1. Create a new binary crate and enter it:
 
-	<Code lang="bash" code={`cargo new span-demo
+	<Code lang="bash" title="Terminal" code={`cargo new span-demo
 cd span-demo`} />
 
 2. Add Sourcier as a dependency:
 
-	<Code lang="bash" code={`cargo add sourcier`} />
+	<Code lang="bash" title="Terminal" code={`cargo add sourcier`} />
 
 	Cargo adds the current `2.0` release to `Cargo.toml`.
 
@@ -43,7 +43,7 @@ one-based ids.
 
 Add this code to `src/main.rs`:
 
-<Code lang="rust" code={`use sourcier::SourceFilesMap;
+<Code lang="rust" title="src/main.rs" code={`use sourcier::SourceFilesMap;
 
 fn main() {
     // u8 ids support up to 255 files; u16 supports 65,535.
@@ -64,7 +64,7 @@ fn main() {
 
 Run the program:
 
-<Code lang="bash" code={`cargo run`} />
+<Code lang="bash" title="Terminal" code={`cargo run`} />
 
 You see the expected output:
 
