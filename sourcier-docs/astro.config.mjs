@@ -1,5 +1,4 @@
 import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
-import starlightHeadingBadges from "starlight-heading-badges";
 import starlightLlmsTxt from "starlight-llms-txt";
 
 export default await defineDocsConfig({
@@ -35,7 +34,6 @@ export default await defineDocsConfig({
 			plugins: [
 				// Fails the build on broken internal links — release blocker.
 				// Click-to-zoom for documentation images. // :badge[...] directives in headings for feature-gated APIs.
-				starlightHeadingBadges(),
 				// Generates llms.txt, llms-small.txt and llms-full.txt.
 				starlightLlmsTxt(),
 			],
