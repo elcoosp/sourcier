@@ -185,7 +185,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - More cases by @elcoosp
 - Use exhaustive_test_suite macro by @elcoosp
 
-## New Contributors
+### New Contributors
 - @elcoosp made their first contribution
 - @github-actions[bot] made their first contribution
 - @renovate[bot] made their first contribution

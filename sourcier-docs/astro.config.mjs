@@ -1,22 +1,14 @@
 import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
-import starlightLlmsTxt from "starlight-llms-txt";
-
 export default await defineDocsConfig({
   llmsTxt: {},
   site: 'https://sourcier.vercel.app',
   domain: 'sourcier.vercel.app',
   title: "Sourcier",
   description: "Compact and efficient source file mapping and position tracking for Rust: register files once, pack every span into a single u64.",
-  sidebar: [],
   extraStarlight: {
 			title: "Sourcier",
 			description:
 				"Compact and efficient source file mapping and position tracking for Rust: register files once, pack every span into a single u64.",
-
-			expressiveCode: {
-				themes: ['github-light', 'github-dark']
-			},
-			favicon: '/favicon.png',
 			social: [
 				{
 					icon: "github",
@@ -35,7 +27,6 @@ export default await defineDocsConfig({
 				// Fails the build on broken internal links — release blocker.
 				// Click-to-zoom for documentation images. // :badge[...] directives in headings for feature-gated APIs.
 				// Generates llms.txt, llms-small.txt and llms-full.txt.
-				starlightLlmsTxt(),
 			],
 			sidebar: [
 				{
