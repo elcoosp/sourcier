@@ -16,15 +16,7 @@ context without blocking.
 
 Create one `RuntimeFeedback`, wrap it in an `Arc` and hand it to the map:
 
-<Code lang="rust" code={`use std::sync::Arc;
-
-use sourcier::{RuntimeFeedback, SourceFilesMap};
-
-let feedback = Arc::new(RuntimeFeedback::new());
-
-let mut files = SourceFilesMap::<u8>::with_feedback(Arc::clone(&feedback));
-files.add_file("a.rs", b"fn a() {}").expect("capacity available");
-files.finalize().expect("no capacity issue");`} />
+<Code lang="rust" code={"use std::sync::Arc;\n\nuse sourcier::{RuntimeFeedback, SourceFilesMap};\n\nlet feedback = Arc::new(RuntimeFeedback::new());\n\nlet mut files = SourceFilesMap::<u8>::with_feedback(Arc::clone(&feedback));\nfiles.add_file(\"a.rs\", b\"fn a() {}\").expect(\"capacity available\");\nfiles.finalize().expect(\"no capacity issue\");"} />
 
 Builders accept the same context through
 `SourceFilesBuilder::with_feedback`.
@@ -33,12 +25,7 @@ Builders accept the same context through
 
 `snapshot` returns an immutable, `Copy` snapshot of the counters:
 
-<Code lang="rust" code={`let snapshot = feedback.snapshot();
-
-assert_eq!(snapshot.total_files, 1);
-assert_eq!(snapshot.total_bytes, 9);
-assert_eq!(snapshot.max_file_size, 9);
-assert_eq!(snapshot.usage_count, 1);`} />
+<Code lang="rust" code={"let snapshot = feedback.snapshot();\n\nassert_eq!(snapshot.total_files, 1);\nassert_eq!(snapshot.total_bytes, 9);\nassert_eq!(snapshot.max_file_size, 9);\nassert_eq!(snapshot.usage_count, 1);"} />
 
 The snapshot fields:
 
@@ -62,30 +49,7 @@ The reporting path takes no locks, so threads only contend on atomic
 instructions. Share the `Arc` across workers and read the counters whenever
 you need them:
 
-<Code lang="rust" code={`use std::sync::Arc;
-
-use sourcier::{RuntimeFeedback, SourceFilesBuilder};
-
-let feedback = Arc::new(RuntimeFeedback::new());
-
-let handles: Vec<_> = (0..4)
-    .map(|i| {
-        let feedback = Arc::clone(&feedback);
-        std::thread::spawn(move || {
-            let mut files = SourceFilesBuilder::<u8>::with_feedback(feedback);
-            files
-                .add_file(format!("{i}.rs"), b"fn x() {}")
-                .expect("capacity available");
-            files.finalize().expect("no capacity issue");
-        })
-    })
-    .collect();
-
-for handle in handles {
-    handle.join().expect("worker finished");
-}
-
-assert_eq!(feedback.snapshot().usage_count, 4);`} />
+<Code lang="rust" code={"use std::sync::Arc;\n\nuse sourcier::{RuntimeFeedback, SourceFilesBuilder};\n\nlet feedback = Arc::new(RuntimeFeedback::new());\n\nlet handles: Vec<_> = (0..4)\n    .map(|i| {\n        let feedback = Arc::clone(&feedback);\n        std::thread::spawn(move || {\n            let mut files = SourceFilesBuilder::<u8>::with_feedback(feedback);\n            files\n                .add_file(format!(\"{i}.rs\"), b\"fn x() {}\")\n                .expect(\"capacity available\");\n            files.finalize().expect(\"no capacity issue\");\n        })\n    })\n    .collect();\n\nfor handle in handles {\n    handle.join().expect(\"worker finished\");\n}\n\nassert_eq!(feedback.snapshot().usage_count, 4);"} />
 
 With the default `serde` feature, `FeedbackSnapshot` also implements
 `Serialize` and `Deserialize`, so you can log or persist snapshots directly.

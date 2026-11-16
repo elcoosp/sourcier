@@ -16,12 +16,7 @@ stable one-based ids.
 `add_file` accepts any path that converts to `&str` and any content that
 converts to `Vec<u8>`:
 
-<Code lang="rust" code={`use sourcier::SourceFilesMap;
-
-let mut files = SourceFilesMap::<u8>::new();
-files
-    .add_file("src/main.rs", b"fn main() {}")
-    .expect("capacity available");`} />
+<Code lang="rust" code={"use sourcier::SourceFilesMap;\n\nlet mut files = SourceFilesMap::<u8>::new();\nfiles\n    .add_file(\"src/main.rs\", b\"fn main() {}\")\n    .expect(\"capacity available\");"} />
 
 The only failure is an exhausted id type (`MapError::TooManyFiles`).
 
@@ -31,17 +26,7 @@ The only failure is an exhausted id type (`MapError::TooManyFiles`).
 loop, prefer the mutating variant `add_file_mut`, which keeps the value in
 place after an error:
 
-<Code lang="rust" code={`use sourcier::{SourceFilesBuilder, SourceFilesMap};
-
-fn collect(names: &[&str]) -> SourceFilesMap<u16> {
-    let mut builder = SourceFilesBuilder::<u16>::with_capacity(names.len());
-    for name in names {
-        builder
-            .add_file_mut(format!("src/{name}.rs"), format!("// {name}"))
-            .expect("u16 capacity");
-    }
-    builder.finalize().expect("no capacity issue")
-}`} />
+<Code lang="rust" code={"use sourcier::{SourceFilesBuilder, SourceFilesMap};\n\nfn collect(names: &[&str]) -> SourceFilesMap<u16> {\n    let mut builder = SourceFilesBuilder::<u16>::with_capacity(names.len());\n    for name in names {\n        builder\n            .add_file_mut(format!(\"src/{name}.rs\"), format!(\"// {name}\"))\n            .expect(\"u16 capacity\");\n    }\n    builder.finalize().expect(\"no capacity issue\")\n}"} />
 
 `with_capacity` pre-reserves storage for the expected file count and reduces
 reallocations while building.
@@ -51,17 +36,7 @@ reallocations while building.
 `add_files` registers an iterator of `(path, content)` pairs and leaves the
 map or builder exactly as it was when any pair fails:
 
-<Code lang="rust" code={`use sourcier::SourceFilesMap;
-
-let mut files = SourceFilesMap::<u8>::new();
-let batch = vec![
-    ("a.rs", &b"fn a() {}"[..]),
-    ("b.rs", &b"fn b() {}"[..]),
-];
-
-files.add_files(batch).expect("capacity available");
-files.finalize().expect("no capacity issue");
-assert_eq!(files.len(), 2);`} />
+<Code lang="rust" code={"use sourcier::SourceFilesMap;\n\nlet mut files = SourceFilesMap::<u8>::new();\nlet batch = vec![\n    (\"a.rs\", &b\"fn a() {}\"[..]),\n    (\"b.rs\", &b\"fn b() {}\"[..]),\n];\n\nfiles.add_files(batch).expect(\"capacity available\");\nfiles.finalize().expect(\"no capacity issue\");\nassert_eq!(files.len(), 2);"} />
 
 Because the batch is atomic, a failure partway through cannot leave a
 partially registered set behind.
@@ -73,16 +48,7 @@ are stored as `str`, so a path carrying bytes that are not valid UTF-8 fails
 with `MapError::PathNotUtf8`, which carries the lossy rendering of the path
 for diagnostics:
 
-<Code lang="rust" code={`use sourcier::{MapError, SourceFilesBuilder};
-use std::path::PathBuf;
-
-let files = SourceFilesBuilder::<u8>::new()
-    .add_path(PathBuf::from("src/main.rs"), b"fn main() {}")
-    .expect("utf-8 path")
-    .finalize()
-    .expect("no capacity issue");
-
-assert_eq!(files.get_id("src/main.rs"), Some(1));`} />
+<Code lang="rust" code={"use sourcier::{MapError, SourceFilesBuilder};\nuse std::path::PathBuf;\n\nlet files = SourceFilesBuilder::<u8>::new()\n    .add_path(PathBuf::from(\"src/main.rs\"), b\"fn main() {}\")\n    .expect(\"utf-8 path\")\n    .finalize()\n    .expect(\"no capacity issue\");\n\nassert_eq!(files.get_id(\"src/main.rs\"), Some(1));"} />
 
 <Aside type="caution">
 	Non-UTF-8 paths cannot be registered losslessly. Convert them at the
@@ -97,14 +63,7 @@ during `finalize`: the first registration of a path wins, later ones are
 dropped, and the resolution holds even at hundreds-of-duplicates scale
 (property-tested):
 
-<Code lang="rust" code={`use sourcier::SourceFilesMap;
-
-let mut files = SourceFilesMap::<u8>::new();
-files.add_file("a.rs", b"first").expect("capacity available");
-files.add_file("a.rs", b"second").expect("capacity available");
-files.finalize().expect("no capacity issue");
-
-assert_eq!(files.get_content(1), Some(&b"first"[..]));`} />
+<Code lang="rust" code={"use sourcier::SourceFilesMap;\n\nlet mut files = SourceFilesMap::<u8>::new();\nfiles.add_file(\"a.rs\", b\"first\").expect(\"capacity available\");\nfiles.add_file(\"a.rs\", b\"second\").expect(\"capacity available\");\nfiles.finalize().expect(\"no capacity issue\");\n\nassert_eq!(files.get_content(1), Some(&b\"first\"[..]));"} />
 
 ## Watch the capacity of the id type
 
@@ -119,8 +78,7 @@ The id type bounds how many files the map can address. Ids are one-based, so
 Call `remaining_capacity` on a builder to learn how many more files the id
 type can address:
 
-<Code lang="rust" code={`let mut builder = SourceFilesBuilder::<u8>::new();
-assert_eq!(builder.remaining_capacity(), 255);`} />
+<Code lang="rust" code={"let mut builder = SourceFilesBuilder::<u8>::new();\nassert_eq!(builder.remaining_capacity(), 255);"} />
 
 Exceeding the limit fails with `MapError::TooManyFiles { max }`, both during
 registration and during finalization.

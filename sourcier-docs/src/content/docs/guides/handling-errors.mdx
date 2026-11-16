@@ -16,36 +16,7 @@ outside the crate always include a catch-all arm.
 `MapError` has five variants. This example recovers from each one
 appropriately:
 
-<Code lang="rust" code={`use sourcier::{MapError, SourceFilesBuilder};
-
-fn register(builder: &mut SourceFilesBuilder<u8>, path: &str, data: &[u8]) {
-    if let Err(err) = builder.add_file_mut(path, data) {
-        match err {
-            MapError::TooManyFiles { max } => {
-                eprintln!("id type exhausted: at most {max} files");
-                // Recover: switch to u16 ids, or stop accepting files.
-            }
-            MapError::FileTooLarge { size } => {
-                eprintln!("file of {size} bytes exceeds the 4 GiB line-offset limit");
-                // Recover: skip the file; views resolve to None for it.
-            }
-            MapError::PathNotUtf8 { path } => {
-                eprintln!("skipping non-UTF-8 path: {path}");
-                // Recover: skip; the path carries U+FFFD replacements.
-            }
-            // The map cannot be modified after finalization; with the
-            // type-state builder these two variants are unrepresentable,
-            // but the raw map can still report them.
-            MapError::Finalized | MapError::AlreadyFinalized => {
-                unreachable!("builder guarantees the build phase")
-            }
-            // non_exhaustive: always keep a catch-all arm.
-            other => {
-                eprintln!("unexpected map error: {other}");
-            }
-        }
-    }
-}`} />
+<Code lang="rust" code={"use sourcier::{MapError, SourceFilesBuilder};\n\nfn register(builder: &mut SourceFilesBuilder<u8>, path: &str, data: &[u8]) {\n    if let Err(err) = builder.add_file_mut(path, data) {\n        match err {\n            MapError::TooManyFiles { max } => {\n                eprintln!(\"id type exhausted: at most {max} files\");\n                // Recover: switch to u16 ids, or stop accepting files.\n            }\n            MapError::FileTooLarge { size } => {\n                eprintln!(\"file of {size} bytes exceeds the 4 GiB line-offset limit\");\n                // Recover: skip the file; views resolve to None for it.\n            }\n            MapError::PathNotUtf8 { path } => {\n                eprintln!(\"skipping non-UTF-8 path: {path}\");\n                // Recover: skip; the path carries U+FFFD replacements.\n            }\n            // The map cannot be modified after finalization; with the\n            // type-state builder these two variants are unrepresentable,\n            // but the raw map can still report them.\n            MapError::Finalized | MapError::AlreadyFinalized => {\n                unreachable!(\"builder guarantees the build phase\")\n            }\n            // non_exhaustive: always keep a catch-all arm.\n            other => {\n                eprintln!(\"unexpected map error: {other}\");\n            }\n        }\n    }\n}"} />
 
 The variants and when they occur:
 
@@ -69,17 +40,7 @@ The variants and when they occur:
 `PositionError` has a single variant, `InvalidRange`, which carries the
 rejected span:
 
-<Code lang="rust" code={`use sourcier::{AbsolutePosition, PositionError};
-
-match AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1) {
-    Ok(pos) => println!("packed as {}", pos.as_raw()),
-    Err(PositionError::InvalidRange { start_line, start_col, end_line, end_col }) => {
-        eprintln!(
-            "invalid span {start_line}:{start_col}-{end_line}:{end_col}"
-        );
-    }
-    Err(_) => unreachable!("only one variant exists today"),
-}`} />
+<Code lang="rust" code={"use sourcier::{AbsolutePosition, PositionError};\n\nmatch AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1) {\n    Ok(pos) => println!(\"packed as {}\", pos.as_raw()),\n    Err(PositionError::InvalidRange { start_line, start_col, end_line, end_col }) => {\n        eprintln!(\n            \"invalid span {start_line}:{start_col}-{end_line}:{end_col}\"\n        );\n    }\n    Err(_) => unreachable!(\"only one variant exists today\"),\n}"} />
 
 A valid span satisfies all of the following:
 
@@ -92,12 +53,7 @@ A valid span satisfies all of the following:
 Both enums implement `std::error::Error` through `thiserror`, and their
 display strings are part of the API surface and covered by snapshot tests:
 
-<Code lang="text" code={`cannot register more than 255 files for this file id type
-the source files map has already been finalized
-cannot modify the source files map after finalization
-file content of 4294967296 bytes exceeds the 4 GiB line offset limit
-path is not valid UTF-8: caf<U+FFFD>.txt
-invalid position range: start 2:1 must not come after end 1:1 and all lines and columns must be at least 1`} />
+<Code lang="text" code={"cannot register more than 255 files for this file id type\nthe source files map has already been finalized\ncannot modify the source files map after finalization\nfile content of 4294967296 bytes exceeds the 4 GiB line offset limit\npath is not valid UTF-8: caf<U+FFFD>.txt\ninvalid position range: start 2:1 must not come after end 1:1 and all lines and columns must be at least 1"} />
 
 ## Plan for capacity up front
 

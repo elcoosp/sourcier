@@ -69,15 +69,7 @@ build-phase map and exposes only the registration API, so mutation after
 finalization cannot be expressed, and its `finalize` consumes the builder
 and returns a map that is already in its lookup phase:
 
-<Code lang="rust" code={`use sourcier::SourceFilesBuilder;
-
-let files = SourceFilesBuilder::<u8>::new()
-    .add_file("src/main.rs", b"fn main() {}")
-    .expect("capacity available")
-    .add_file("src/lib.rs", b"pub mod utils;")
-    .expect("capacity available")
-    .finalize()
-    .expect("no capacity issue");`} />
+<Code lang="rust" code={"use sourcier::SourceFilesBuilder;\n\nlet files = SourceFilesBuilder::<u8>::new()\n    .add_file(\"src/main.rs\", b\"fn main() {}\")\n    .expect(\"capacity available\")\n    .add_file(\"src/lib.rs\", b\"pub mod utils;\")\n    .expect(\"capacity available\")\n    .finalize()\n    .expect(\"no capacity issue\");"} />
 
 The phase errors are unrepresentable through the builder; the compiler
 enforces the lifecycle. Choose the builder when the lifecycle is linear —

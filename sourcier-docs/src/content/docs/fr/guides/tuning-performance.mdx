@@ -12,10 +12,7 @@ Utilisez ce guide quand les maps grossissent, quand la finalisation apparaît da
 
 La map et le builder acceptent tous deux un nombre attendu de fichiers, ce qui pré-réserve le stockage et réduit les réallocations pendant la construction :
 
-<Code lang="rust" code={`use sourcier::SourceFilesBuilder;
-
-let builder = SourceFilesBuilder::<u16>::with_capacity(4_096);
-assert_eq!(builder.remaining_capacity(), 65_535);`} />
+<Code lang="rust" code={"use sourcier::SourceFilesBuilder;\n\nlet builder = SourceFilesBuilder::<u16>::with_capacity(4_096);\nassert_eq!(builder.remaining_capacity(), 65_535);"} />
 
 ## Choisir le plus petit type d'id qui tient
 
@@ -32,8 +29,7 @@ Les types d'id plus petits laissent plus de bits aux autres champs du `u64` comp
 
 Les index d'offsets de ligne sont construits avec un seul scan accéléré par `memchr` par défaut. La fonctionnalité opt-in `parallel` étale ce scan sur les cœurs avec `rayon` pour d'immenses ensembles de fichiers :
 
-<Code lang="toml" title="Cargo.toml" code={`[dependencies]
-sourcier = { version = "2.0", features = ["parallel"] }`} />
+<Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { version = \"2.0\", features = [\"parallel\"] }"} />
 
 <Aside type="note">
 	Sur une VM de référence à 2 cœurs, le surcoût du pool de threads a dépassé les économies du scan, ce qui explique pourquoi la fonctionnalité est opt-in. Activez-la sur les machines de build à plusieurs cœurs où les ensembles de fichiers sont grands.
@@ -43,8 +39,7 @@ sourcier = { version = "2.0", features = ["parallel"] }`} />
 
 Les fonctionnalités par défaut tirent `serde`, `view` et `rt-feedback`. Désactivez ce que votre outil n'utilise pas :
 
-<Code lang="toml" title="Cargo.toml" code={`[dependencies]
-sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
+<Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { version = \"2.0\", default-features = false, features = [\"view\"] }"} />
 
 Chaque fonctionnalité retirée retire du code du binaire et du travail du build ; voir [Drapeaux de fonctionnalité](/reference/feature-flags/) pour ce que chacun conditionne.
 
@@ -70,7 +65,7 @@ L'index path-vers-id de la 2.0 échange un peu de latence de hit (~20 %) contre 
 
 Les pistes de benchmark pour le builder, le pont d'offsets et les lookups font partie du dépôt, donc vous pouvez épingler les coûts dont dépend votre outil :
 
-<Code lang="bash" title="Terminal" code={`cargo bench -p sourcier-core`} />
+<Code lang="bash" title="Terminal" code={"cargo bench -p sourcier-core"} />
 
 ## Étapes suivantes
 

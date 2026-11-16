@@ -12,13 +12,12 @@ Utilisez ce guide pour ajouter Sourcier à un projet Rust existant et configurer
 
 <Tabs>
 	<TabItem label="cargo add">
-		<Code lang="bash" title="Terminal" code={`cargo add sourcier`} />
+		<Code lang="bash" title="Terminal" code={"cargo add sourcier"} />
 
 		Cargo ajoute la dernière version `2.0` et active les fonctionnalités par défaut.
 	</TabItem>
 	<TabItem label="Cargo.toml">
-		<Code lang="toml" title="Cargo.toml" code={`[dependencies]
-sourcier = "2.0"`} />
+		<Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = \"2.0\""} />
 	</TabItem>
 </Tabs>
 
@@ -27,25 +26,16 @@ Vous ne dépendez jamais que de `sourcier`. Elle ré-exporte toute l'API de la c
 <Aside type="note">
 	Vous préférez une dépendance vivante ? Suivez le dépôt directement :
 
-	<Code lang="toml" title="Cargo.toml" code={`[dependencies]
-sourcier = { git = "https://github.com/elcoosp/sourcier", branch = "main" }`} />
+	<Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { git = \"https://github.com/elcoosp/sourcier\", branch = \"main\" }"} />
 </Aside>
 
 ## Vérifier l'installation
 
 Compilez un programme de trois lignes qui touche l'API publique :
 
-<Code lang="rust" code={`use sourcier::{SourceFilesBuilder, SourceFilesMap};
+<Code lang="rust" code={"use sourcier::{SourceFilesBuilder, SourceFilesMap};\n\nlet files = SourceFilesBuilder::<u8>::new()\n    .add_file(\"a.rs\", b\"fn a() {}\")\n    .expect(\"capacity available\")\n    .finalize()\n    .expect(\"no capacity issue\");\n\nlet _: &str = files.get_path(1).expect(\"file present\");"} />
 
-let files = SourceFilesBuilder::<u8>::new()
-    .add_file("a.rs", b"fn a() {}")
-    .expect("capacity available")
-    .finalize()
-    .expect("no capacity issue");
-
-let _: &str = files.get_path(1).expect("file present");`} />
-
-<Code lang="bash" title="Terminal" code={`cargo build`} />
+<Code lang="bash" title="Terminal" code={"cargo build"} />
 
 Un build réussi n'imprime rien. Toute erreur `unresolved import` signifie que la dépendance n'a pas été résolue — vérifiez que `Cargo.lock` contient `sourcier`.
 
@@ -53,8 +43,7 @@ Un build réussi n'imprime rien. Toute erreur `unresolved import` signifie que l
 
 Toutes les fonctionnalités sauf `parallel` sont activées par défaut et transmises à `sourcier-core`. Désactivez celles dont vous n'avez pas besoin pour un build plus léger :
 
-<Code lang="toml" title="Cargo.toml" code={`[dependencies]
-sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
+<Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { version = \"2.0\", default-features = false, features = [\"view\"] }"} />
 
 Cela garde l'index d'offsets de ligne et l'extraction d'octets tout en retirant la sérialisation et les statistiques d'exécution. Voir [Drapeaux de fonctionnalité](/reference/feature-flags/) pour la matrice complète et ce que chaque fonctionnalité conditionne.
 

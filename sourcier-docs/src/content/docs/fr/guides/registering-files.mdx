@@ -12,12 +12,7 @@ Utilisez ce guide pour choisir la bonne API d'enregistrement selon votre situati
 
 `add_file` accepte n'importe quel chemin qui se convertit en `&str` et n'importe quel contenu qui se convertit en `Vec<u8>` :
 
-<Code lang="rust" code={`use sourcier::SourceFilesMap;
-
-let mut files = SourceFilesMap::<u8>::new();
-files
-    .add_file("src/main.rs", b"fn main() {}")
-    .expect("capacity available");`} />
+<Code lang="rust" code={"use sourcier::SourceFilesMap;\n\nlet mut files = SourceFilesMap::<u8>::new();\nfiles\n    .add_file(\"src/main.rs\", b\"fn main() {}\")\n    .expect(\"capacity available\");"} />
 
 Le seul échec possible est un type d'id épuisé (`MapError::TooManyFiles`).
 
@@ -25,17 +20,7 @@ Le seul échec possible est un type d'id épuisé (`MapError::TooManyFiles`).
 
 `add_file` consomme et renvoie la map ou le builder pour chaîner. Dans une boucle, préférez la variante mutante `add_file_mut`, qui garde la valeur en place après une erreur :
 
-<Code lang="rust" code={`use sourcier::{SourceFilesBuilder, SourceFilesMap};
-
-fn collect(names: &[&str]) -> SourceFilesMap<u16> {
-    let mut builder = SourceFilesBuilder::<u16>::with_capacity(names.len());
-    for name in names {
-        builder
-            .add_file_mut(format!("src/{name}.rs"), format!("// {name}"))
-            .expect("u16 capacity");
-    }
-    builder.finalize().expect("no capacity issue")
-}`} />
+<Code lang="rust" code={"use sourcier::{SourceFilesBuilder, SourceFilesMap};\n\nfn collect(names: &[&str]) -> SourceFilesMap<u16> {\n    let mut builder = SourceFilesBuilder::<u16>::with_capacity(names.len());\n    for name in names {\n        builder\n            .add_file_mut(format!(\"src/{name}.rs\"), format!(\"// {name}\"))\n            .expect(\"u16 capacity\");\n    }\n    builder.finalize().expect(\"no capacity issue\")\n}"} />
 
 `with_capacity` pré-réserve le stockage pour le nombre attendu de fichiers et réduit les réallocations pendant la construction.
 
@@ -43,17 +28,7 @@ fn collect(names: &[&str]) -> SourceFilesMap<u16> {
 
 `add_files` enregistre un itérateur de paires `(path, content)` et laisse la map ou le builder exactement comme il était quand une paire échoue :
 
-<Code lang="rust" code={`use sourcier::SourceFilesMap;
-
-let mut files = SourceFilesMap::<u8>::new();
-let batch = vec![
-    ("a.rs", &b"fn a() {}"[..]),
-    ("b.rs", &b"fn b() {}"[..]),
-];
-
-files.add_files(batch).expect("capacity available");
-files.finalize().expect("no capacity issue");
-assert_eq!(files.len(), 2);`} />
+<Code lang="rust" code={"use sourcier::SourceFilesMap;\n\nlet mut files = SourceFilesMap::<u8>::new();\nlet batch = vec![\n    (\"a.rs\", &b\"fn a() {}\"[..]),\n    (\"b.rs\", &b\"fn b() {}\"[..]),\n];\n\nfiles.add_files(batch).expect(\"capacity available\");\nfiles.finalize().expect(\"no capacity issue\");\nassert_eq!(files.len(), 2);"} />
 
 Parce que le lot est atomique, un échec en cours de route ne peut pas laisser un ensemble partiellement enregistré derrière.
 
@@ -61,16 +36,7 @@ Parce que le lot est atomique, un échec en cours de route ne peut pas laisser u
 
 Les outils qui tiennent des valeurs `Path`/`PathBuf` enregistrent via `add_path`. Les chemins sont stockés comme `str`, donc un chemin portant des octets qui ne sont pas de l'UTF-8 valide échoue avec `MapError::PathNotUtf8`, qui porte le rendu avec perte du chemin pour les diagnostics :
 
-<Code lang="rust" code={`use sourcier::{MapError, SourceFilesBuilder};
-use std::path::PathBuf;
-
-let files = SourceFilesBuilder::<u8>::new()
-    .add_path(PathBuf::from("src/main.rs"), b"fn main() {}")
-    .expect("utf-8 path")
-    .finalize()
-    .expect("no capacity issue");
-
-assert_eq!(files.get_id("src/main.rs"), Some(1));`} />
+<Code lang="rust" code={"use sourcier::{MapError, SourceFilesBuilder};\nuse std::path::PathBuf;\n\nlet files = SourceFilesBuilder::<u8>::new()\n    .add_path(PathBuf::from(\"src/main.rs\"), b\"fn main() {}\")\n    .expect(\"utf-8 path\")\n    .finalize()\n    .expect(\"no capacity issue\");\n\nassert_eq!(files.get_id(\"src/main.rs\"), Some(1));"} />
 
 <Aside type="caution">
 	Les chemins non-UTF-8 ne peuvent pas être enregistrés sans perte. Convertissez-les à la frontière de votre outil et rapportez `MapError::PathNotUtf8` avec son champ `path` à l'utilisateur.
@@ -80,14 +46,7 @@ assert_eq!(files.get_id("src/main.rs"), Some(1));`} />
 
 Vous pouvez enregistrer le même chemin autant de fois que vous voulez. Les doublons sont résolus pendant `finalize` : le premier enregistrement d'un chemin gagne, les suivants sont abandonnés, et la résolution tient même à l'échelle de centaines de doublons (testé par propriétés) :
 
-<Code lang="rust" code={`use sourcier::SourceFilesMap;
-
-let mut files = SourceFilesMap::<u8>::new();
-files.add_file("a.rs", b"first").expect("capacity available");
-files.add_file("a.rs", b"second").expect("capacity available");
-files.finalize().expect("no capacity issue");
-
-assert_eq!(files.get_content(1), Some(&b"first"[..]));`} />
+<Code lang="rust" code={"use sourcier::SourceFilesMap;\n\nlet mut files = SourceFilesMap::<u8>::new();\nfiles.add_file(\"a.rs\", b\"first\").expect(\"capacity available\");\nfiles.add_file(\"a.rs\", b\"second\").expect(\"capacity available\");\nfiles.finalize().expect(\"no capacity issue\");\n\nassert_eq!(files.get_content(1), Some(&b\"first\"[..]));"} />
 
 ## Surveiller la capacité du type d'id
 
@@ -100,8 +59,7 @@ Le type d'id borne combien de fichiers la map peut adresser. Les ids sont à bas
 
 Appelez `remaining_capacity` sur un builder pour savoir combien de fichiers de plus le type d'id peut adresser :
 
-<Code lang="rust" code={`let mut builder = SourceFilesBuilder::<u8>::new();
-assert_eq!(builder.remaining_capacity(), 255);`} />
+<Code lang="rust" code={"let mut builder = SourceFilesBuilder::<u8>::new();\nassert_eq!(builder.remaining_capacity(), 255);"} />
 
 Dépasser la limite échoue avec `MapError::TooManyFiles { max }`, à la fois pendant l'enregistrement et pendant la finalisation.
 

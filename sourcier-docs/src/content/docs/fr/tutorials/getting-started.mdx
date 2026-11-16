@@ -18,12 +18,11 @@ Ce tutoriel vous emmène à travers le chemin doré de Sourcier : enregistrer de
 <Steps>
 1. Créez une nouvelle crate binaire et entrez dedans :
 
-	<Code lang="bash" title="Terminal" code={`cargo new span-demo
-cd span-demo`} />
+	<Code lang="bash" title="Terminal" code={"cargo new span-demo\ncd span-demo"} />
 
 2. Ajoutez Sourcier comme dépendance :
 
-	<Code lang="bash" title="Terminal" code={`cargo add sourcier`} />
+	<Code lang="bash" title="Terminal" code={"cargo add sourcier"} />
 
 	Cargo ajoute la version `2.0` courante à `Cargo.toml`.
 
@@ -36,32 +35,15 @@ Sourcier utilise un cycle de vie à deux phases : vous enregistrez d'abord les f
 
 Ajoutez ce code à `src/main.rs` :
 
-<Code lang="rust" title="src/main.rs" code={`use sourcier::SourceFilesMap;
-
-fn main() {
-    // Les ids u8 supportent jusqu'à 255 fichiers ; u16 en supporte 65 535.
-    let mut files = SourceFilesMap::<u8>::new();
-
-    files
-        .add_file("src/main.rs", b"fn main() {\\n    println!(\\"Hello\\");\\n}")
-        .expect("capacity available");
-    files
-        .add_file("src/lib.rs", b"pub mod utils;")
-        .expect("capacity available");
-
-    // Trie par chemin, déduplique, assigne des ids à base un.
-    files.finalize().expect("no capacity issue");
-
-    println!("registered {} files", files.len());
-}`} />
+<Code lang="rust" title="src/main.rs" code={"use sourcier::SourceFilesMap;\n\nfn main() {\n    // Les ids u8 supportent jusqu'\u00e0 255 fichiers ; u16 en supporte 65 535.\n    let mut files = SourceFilesMap::<u8>::new();\n\n    files\n        .add_file(\"src/main.rs\", b\"fn main() {\\\\n    println!(\\\\\"Hello\\\\\");\\\\n}\")\n        .expect(\"capacity available\");\n    files\n        .add_file(\"src/lib.rs\", b\"pub mod utils;\")\n        .expect(\"capacity available\");\n\n    // Trie par chemin, d\u00e9duplique, assigne des ids \u00e0 base un.\n    files.finalize().expect(\"no capacity issue\");\n\n    println!(\"registered {} files\", files.len());\n}"} />
 
 Exécutez le programme :
 
-<Code lang="bash" title="Terminal" code={`cargo run`} />
+<Code lang="bash" title="Terminal" code={"cargo run"} />
 
 Vous voyez la sortie attendue :
 
-<Code lang="ansi" code={`registered 2 files`} />
+<Code lang="ansi" code={"registered 2 files"} />
 
 <Aside type="note">
 	`add_file` accepte n'importe quel `impl AsRef<str>` pour le chemin et
@@ -73,17 +55,7 @@ Vous voyez la sortie attendue :
 
 Après la finalisation, la map répond aux requêtes en temps constant. Étendez `main` :
 
-<Code lang="rust" code={`// Path vers id, et id vers path.
-let id = files.get_id("src/main.rs").expect("file present");
-assert_eq!(files.get_path(id), Some("src/main.rs"));
-
-// Les ids sont assignés dans l'ordre trié des chemins, à partir de 1.
-assert_eq!(id, 1);
-
-// Id vers entrée empruntée complète.
-let entry = files.get(id).expect("file present");
-assert_eq!(entry.path, "src/main.rs");
-assert!(entry.content.starts_with(b"fn main"));`} />
+<Code lang="rust" code={"// Path vers id, et id vers path.\nlet id = files.get_id(\"src/main.rs\").expect(\"file present\");\nassert_eq!(files.get_path(id), Some(\"src/main.rs\"));\n\n// Les ids sont assign\u00e9s dans l'ordre tri\u00e9 des chemins, \u00e0 partir de 1.\nassert_eq!(id, 1);\n\n// Id vers entr\u00e9e emprunt\u00e9e compl\u00e8te.\nlet entry = files.get(id).expect(\"file present\");\nassert_eq!(entry.path, \"src/main.rs\");\nassert!(entry.content.starts_with(b\"fn main\"));"} />
 
 `src/lib.rs` se trie avant `src/main.rs`, donc il reçoit l'id `1` et `src/main.rs` reçoit l'id `2`. Les ids triés sont stables : le même ensemble de fichiers produit toujours les mêmes ids, ce qui les rend sûrs à persister.
 
@@ -91,39 +63,25 @@ assert!(entry.content.starts_with(b"fn main"));`} />
 
 `AbsolutePosition` compacte cinq champs — id de fichier, ligne de début, colonne de début, ligne de fin et colonne de fin — dans un seul `u64`. Les lignes et les colonnes sont à base un et la fin est inclusive :
 
-<Code lang="rust" title="src/main.rs" code={`use sourcier::{AbsolutePosition, SourceFilePosition};
-
-let pos = AbsolutePosition::new(id, 2, 5, 2, 22);
-
-assert_eq!(pos.file_id(), id);
-assert_eq!(pos.start_line(), 2);
-assert_eq!(pos.start_column(), 5);
-assert_eq!(pos.end_line(), 2);
-assert_eq!(pos.end_column(), 22);`} />
+<Code lang="rust" title="src/main.rs" code={"use sourcier::{AbsolutePosition, SourceFilePosition};\n\nlet pos = AbsolutePosition::new(id, 2, 5, 2, 22);\n\nassert_eq!(pos.file_id(), id);\nassert_eq!(pos.start_line(), 2);\nassert_eq!(pos.start_column(), 5);\nassert_eq!(pos.end_line(), 2);\nassert_eq!(pos.end_column(), 22);"} />
 
 `AbsolutePosition::new` est infaillible et zéro-coût : les valeurs sont encodées telles quelles. Utilisez `try_new` quand vous voulez que le span soit validé comme une région bien formée à base un :
 
-<Code lang="rust" code={`assert!(AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1).is_err());
-assert!(AbsolutePosition::<u8>::try_new(1, 1, 1, 1, 1).is_ok());`} />
+<Code lang="rust" code={"assert!(AbsolutePosition::<u8>::try_new(1, 2, 1, 1, 1).is_err());\nassert!(AbsolutePosition::<u8>::try_new(1, 1, 1, 1, 1).is_ok());"} />
 
 ## Extraire les octets exacts du span
 
 Avec la fonctionnalité par défaut `view`, la map fait le pont entre positions et octets qu'elles couvrent :
 
-<Code lang="rust" code={`assert_eq!(
-    files.view(id, &pos),
-    Some(&b"println!(\\"Hello\\");"[..])
-);`} />
+<Code lang="rust" code={"assert_eq!(\n    files.view(id, &pos),\n    Some(&b\"println!(\\\\\"Hello\\\\\");\"[..])\n);"} />
 
 `view` renvoie les octets du span y compris les terminateurs de ligne qu'il couvre. Pour de la source UTF-8, vous pouvez utiliser `view_str`, qui renvoie `&str` et donne `None` quand le span coupe un caractère multi-octets.
 
 Votre programme enregistre maintenant des fichiers, les cherche, compacte des positions et extrait les octets source. Imprimez la vue extraite à la fin de `main` pour la voir à l'œuvre :
 
-<Code lang="rust" code={`if let Some(bytes) = files.view(id, &pos) {
-    println!("{}", String::from_utf8_lossy(bytes));
-}`} />
+<Code lang="rust" code={"if let Some(bytes) = files.view(id, &pos) {\n    println!(\"{}\", String::from_utf8_lossy(bytes));\n}"} />
 
-<Code lang="ansi" code={`println!("Hello");`} />
+<Code lang="ansi" code={"println!(\"Hello\");"} />
 
 ## Étapes suivantes
 

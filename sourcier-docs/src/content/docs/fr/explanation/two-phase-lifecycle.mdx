@@ -40,15 +40,7 @@ La map brute suit sa phase à l'exécution et rapporte les erreurs comme erreurs
 
 `SourceFilesBuilder` retire ces erreurs au niveau du type. Il enveloppe une map en phase de construction et n'expose que l'API d'enregistrement, donc la mutation après finalisation ne peut pas être exprimée, et son `finalize` consomme le builder et renvoie une map déjà dans sa phase de lookup :
 
-<Code lang="rust" code={`use sourcier::SourceFilesBuilder;
-
-let files = SourceFilesBuilder::<u8>::new()
-    .add_file("src/main.rs", b"fn main() {}")
-    .expect("capacity available")
-    .add_file("src/lib.rs", b"pub mod utils;")
-    .expect("capacity available")
-    .finalize()
-    .expect("no capacity issue");`} />
+<Code lang="rust" code={"use sourcier::SourceFilesBuilder;\n\nlet files = SourceFilesBuilder::<u8>::new()\n    .add_file(\"src/main.rs\", b\"fn main() {}\")\n    .expect(\"capacity available\")\n    .add_file(\"src/lib.rs\", b\"pub mod utils;\")\n    .expect(\"capacity available\")\n    .finalize()\n    .expect(\"no capacity issue\");"} />
 
 Les erreurs de phase sont non représentables à travers le builder ; le compilateur impose le cycle de vie. Choisissez le builder quand le cycle de vie est linéaire — enregistrer, finaliser, puis interroger — et la map brute quand un outil déplace légitimement une seule map entre phases.
 

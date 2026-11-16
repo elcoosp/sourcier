@@ -14,13 +14,12 @@ MSRV is verified in CI across feature configurations.
 
 <Tabs>
 	<TabItem label="cargo add">
-		<Code lang="bash" title="Terminal" code={`cargo add sourcier`} />
+		<Code lang="bash" title="Terminal" code={"cargo add sourcier"} />
 
 		Cargo adds the latest `2.0` release and enables the default features.
 	</TabItem>
 	<TabItem label="Cargo.toml">
-		<Code lang="toml" title="Cargo.toml" code={`[dependencies]
-sourcier = "2.0"`} />
+		<Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = \"2.0\""} />
 	</TabItem>
 </Tabs>
 
@@ -31,25 +30,16 @@ small and the facade stable.
 <Aside type="note">
 	Prefer a living dependency? Track the repository directly:
 
-	<Code lang="toml" title="Cargo.toml" code={`[dependencies]
-sourcier = { git = "https://github.com/elcoosp/sourcier", branch = "main" }`} />
+	<Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { git = \"https://github.com/elcoosp/sourcier\", branch = \"main\" }"} />
 </Aside>
 
 ## Verify the install
 
 Compile a three-line program that touches the public API:
 
-<Code lang="rust" code={`use sourcier::{SourceFilesBuilder, SourceFilesMap};
+<Code lang="rust" code={"use sourcier::{SourceFilesBuilder, SourceFilesMap};\n\nlet files = SourceFilesBuilder::<u8>::new()\n    .add_file(\"a.rs\", b\"fn a() {}\")\n    .expect(\"capacity available\")\n    .finalize()\n    .expect(\"no capacity issue\");\n\nlet _: &str = files.get_path(1).expect(\"file present\");"} />
 
-let files = SourceFilesBuilder::<u8>::new()
-    .add_file("a.rs", b"fn a() {}")
-    .expect("capacity available")
-    .finalize()
-    .expect("no capacity issue");
-
-let _: &str = files.get_path(1).expect("file present");`} />
-
-<Code lang="bash" title="Terminal" code={`cargo build`} />
+<Code lang="bash" title="Terminal" code={"cargo build"} />
 
 A successful build prints nothing. Any `unresolved import` error means the
 dependency did not resolve — check that `Cargo.lock` contains `sourcier`.
@@ -59,8 +49,7 @@ dependency did not resolve — check that `Cargo.lock` contains `sourcier`.
 All features except `parallel` are enabled by default and forwarded to
 `sourcier-core`. Disable the ones you do not need for a leaner build:
 
-<Code lang="toml" title="Cargo.toml" code={`[dependencies]
-sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
+<Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { version = \"2.0\", default-features = false, features = [\"view\"] }"} />
 
 This keeps the line-offset index and byte extraction while dropping
 serialization and runtime statistics. See
