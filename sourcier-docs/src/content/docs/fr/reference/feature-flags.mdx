@@ -29,17 +29,17 @@ Toutes les fonctionnalités sont activées par défaut et transmises à la crate
 
 Garder seulement l'extraction d'octets :
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Cargo.toml" code={`[dependencies]
 sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
 
 Garder la sérialisation sans vues ni statistiques :
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Cargo.toml" code={`[dependencies]
 sourcier = { version = "2.0", default-features = false, features = ["serde"] }`} />
 
 Tout activer, y compris le parallélisme :
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Cargo.toml" code={`[dependencies]
 sourcier = { version = "2.0", features = ["parallel"] }`} />
 
 <Aside type="caution">

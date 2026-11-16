@@ -37,17 +37,17 @@ processing large file sets; it adds the `rayon` dependency.
 
 Keep only byte extraction:
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Cargo.toml" code={`[dependencies]
 sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
 
 Keep serialization but no views and no statistics:
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Cargo.toml" code={`[dependencies]
 sourcier = { version = "2.0", default-features = false, features = ["serde"] }`} />
 
 Enable everything including parallelism:
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Cargo.toml" code={`[dependencies]
 sourcier = { version = "2.0", features = ["parallel"] }`} />
 
 <Aside type="caution">

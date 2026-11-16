@@ -91,7 +91,7 @@ assert!(entry.content.starts_with(b"fn main"));`} />
 
 `AbsolutePosition` compacte cinq champs — id de fichier, ligne de début, colonne de début, ligne de fin et colonne de fin — dans un seul `u64`. Les lignes et les colonnes sont à base un et la fin est inclusive :
 
-<Code lang="rust" code={`use sourcier::{AbsolutePosition, SourceFilePosition};
+<Code lang="rust" title="src/main.rs" code={`use sourcier::{AbsolutePosition, SourceFilePosition};
 
 let pos = AbsolutePosition::new(id, 2, 5, 2, 22);
 

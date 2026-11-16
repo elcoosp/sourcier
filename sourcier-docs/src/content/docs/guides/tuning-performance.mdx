@@ -40,7 +40,7 @@ Line-offset indexes are built with a single `memchr`-accelerated scan by
 default. The opt-in `parallel` feature spreads that scan across cores with
 `rayon` for huge file sets:
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Cargo.toml" code={`[dependencies]
 sourcier = { version = "2.0", features = ["parallel"] }`} />
 
 <Aside type="note">
@@ -54,7 +54,7 @@ sourcier = { version = "2.0", features = ["parallel"] }`} />
 Default features pull in `serde`, `view` and `rt-feedback`. Disable what your
 tool does not use:
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Cargo.toml" code={`[dependencies]
 sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
 
 Each trimmed feature removes code from the binary and work from the build;

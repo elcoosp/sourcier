@@ -102,7 +102,7 @@ always produces the same ids, which makes them safe to persist.
 line and end column — into one `u64`. Lines and columns are one-based and the
 end is inclusive:
 
-<Code lang="rust" code={`use sourcier::{AbsolutePosition, SourceFilePosition};
+<Code lang="rust" title="src/main.rs" code={`use sourcier::{AbsolutePosition, SourceFilePosition};
 
 let pos = AbsolutePosition::new(id, 2, 5, 2, 22);
 

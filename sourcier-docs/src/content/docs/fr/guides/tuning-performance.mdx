@@ -32,7 +32,7 @@ Les types d'id plus petits laissent plus de bits aux autres champs du `u64` comp
 
 Les index d'offsets de ligne sont construits avec un seul scan accéléré par `memchr` par défaut. La fonctionnalité opt-in `parallel` étale ce scan sur les cœurs avec `rayon` pour d'immenses ensembles de fichiers :
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Cargo.toml" code={`[dependencies]
 sourcier = { version = "2.0", features = ["parallel"] }`} />
 
 <Aside type="note">
@@ -43,7 +43,7 @@ sourcier = { version = "2.0", features = ["parallel"] }`} />
 
 Les fonctionnalités par défaut tirent `serde`, `view` et `rt-feedback`. Désactivez ce que votre outil n'utilise pas :
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Cargo.toml" code={`[dependencies]
 sourcier = { version = "2.0", default-features = false, features = ["view"] }`} />
 
 Chaque fonctionnalité retirée retire du code du binaire et du travail du build ; voir [Drapeaux de fonctionnalité](/reference/feature-flags/) pour ce que chacun conditionne.
