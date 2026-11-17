@@ -1,0 +1,25 @@
+# Curated domain glossary for @elcoosp/docs-toolkit (starlight-term-glossary)
+- term: "build phase"
+  locale: en
+  href: "/explanation/two-phase-lifecycle/#the-build-phase"
+  definition: "Mutable registration stage in SourceFilesMap where source files are inserted before finalization assigns compact FileIds."
+- term: "open-addressed index"
+  locale: en
+  href: "/explanation/performance-design/"
+  definition: "Cache-friendly flat hash table mapping file paths to FileIds without pointer chasing or per-entry heap allocations."
+- term: "line index"
+  locale: en
+  href: "/guides/navigating-source/"
+  definition: "Compact sorted table of newline byte offsets built in a single memchr pass for fast line and column resolution."
+- term: "phase de construction"
+  locale: fr
+  href: "/fr/explanation/two-phase-lifecycle/"
+  definition: "Étape mutable d’enregistrement des fichiers dans SourceFilesMap avant que la finalisation n’attribue les FileId."
+- term: "finalization"
+  locale: en
+  href: "/explanation/two-phase-lifecycle/"
+  definition: "Transition sealing SourceFilesMap by sorting, deduplicating paths, and assigning compact sequential FileIds."
+- term: "finalisation"
+  locale: fr
+  href: "/fr/explanation/two-phase-lifecycle/"
+  definition: "Transition scellant SourceFilesMap par tri, déduplication des chemins et attribution d’identifiants FileId compacts."
