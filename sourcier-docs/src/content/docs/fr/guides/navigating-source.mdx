@@ -29,7 +29,7 @@ La map fait le pont entre offsets d'octets et positions compactées en O(log n) 
 `position_from_offset` renvoie une position point de largeur nulle. Les offsets jusqu'à la longueur du contenu inclus se résolvent : la longueur du contenu se mappe à la colonne juste après le dernier octet, l'ancre d'insertion conventionnelle à la fin du fichier.
 
 <Aside type="caution">
-	Les offsets dont la ligne ou la colonne ne peut pas être représentée par l'encodage compacté se résolvent en `None` : fichiers de plus de 65 535 lignes, ou lignes de plus de 255 octets.
+    Les offsets dont la ligne ou la colonne ne peut pas être représentée par l'encodage compacté se résolvent en `None` : fichiers de plus de 65 535 lignes, ou lignes de plus de 255 octets.
 </Aside>
 
 ## Rendre les diagnostics

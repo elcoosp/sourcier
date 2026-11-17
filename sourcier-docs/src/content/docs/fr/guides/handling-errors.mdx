@@ -25,7 +25,7 @@ Les variantes et quand elles se produisent :
 | `PathNotUtf8` | `path: String` | `add_path` reçoit un chemin qui n'est pas de l'UTF-8 valide |
 
 <Aside type="tip">
-	`SourceFilesBuilder` n'expose que l'API d'enregistrement et `finalize` le consomme, donc `MapError::Finalized` et `MapError::AlreadyFinalized` ne peuvent pas être produits via le builder. Ils restent atteignables via la `SourceFilesMap` brute, qui garde ses erreurs de phase à l'exécution.
+    `SourceFilesBuilder` n'expose que l'API d'enregistrement et `finalize` le consomme, donc `MapError::Finalized` et `MapError::AlreadyFinalized` ne peuvent pas être produits via le builder. Ils restent atteignables via la `SourceFilesMap` brute, qui garde ses erreurs de phase à l'exécution.
 </Aside>
 
 ## Gérer les échecs de position vérifiés

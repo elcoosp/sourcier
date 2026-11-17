@@ -48,10 +48,10 @@ Enable everything including parallelism:
 <Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { version = \"2.0\", features = [\"parallel\"] }"} />
 
 <Aside type="caution">
-	Disabling a feature removes its APIs from the compiled crate: code that
-	calls `view` with `default-features = false` fails to compile. Cargo
-	unifies features across your dependency graph, so another crate in the
-	tree can re-enable a feature you trimmed.
+    Disabling a feature removes its APIs from the compiled crate: code that
+    calls `view` with `default-features = false` fails to compile. Cargo
+    unifies features across your dependency graph, so another crate in the
+    tree can re-enable a feature you trimmed.
 </Aside>
 
 ## MSRV per configuration

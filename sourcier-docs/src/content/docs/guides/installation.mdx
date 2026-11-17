@@ -13,14 +13,14 @@ MSRV is verified in CI across feature configurations.
 ## Add the dependency
 
 <Tabs>
-	<TabItem label="cargo add">
-		<Code lang="bash" title="Terminal" code={"cargo add sourcier"} />
+    <TabItem label="cargo add">
+        <Code lang="bash" title="Terminal" code={"cargo add sourcier"} />
 
-		Cargo adds the latest `2.0` release and enables the default features.
-	</TabItem>
-	<TabItem label="Cargo.toml">
-		<Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = \"2.0\""} />
-	</TabItem>
+        Cargo adds the latest `2.0` release and enables the default features.
+    </TabItem>
+    <TabItem label="Cargo.toml">
+        <Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = \"2.0\""} />
+    </TabItem>
 </Tabs>
 
 You only ever depend on `sourcier`. It re-exports the full API of the
@@ -28,9 +28,9 @@ You only ever depend on `sourcier`. It re-exports the full API of the
 small and the facade stable.
 
 <Aside type="note">
-	Prefer a living dependency? Track the repository directly:
+    Prefer a living dependency? Track the repository directly:
 
-	<Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { git = \"https://github.com/elcoosp/sourcier\", branch = \"main\" }"} />
+    <Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { git = \"https://github.com/elcoosp/sourcier\", branch = \"main\" }"} />
 </Aside>
 
 ## Verify the install
@@ -57,9 +57,9 @@ serialization and runtime statistics. See
 feature gates.
 
 <Aside type="caution">
-	Disabling `view` removes `view`, `view_str`, `position_from_offset`,
-	`offset_from_position` and `display_position`. Code that calls them fails
-	to compile until you re-enable the feature.
+    Disabling `view` removes `view`, `view_str`, `position_from_offset`,
+    `offset_from_position` and `display_position`. Code that calls them fails
+    to compile until you re-enable the feature.
 </Aside>
 
 ## Next steps

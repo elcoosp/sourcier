@@ -11,22 +11,22 @@ Utilisez ce guide pour ajouter Sourcier à un projet Rust existant et configurer
 ## Ajouter la dépendance
 
 <Tabs>
-	<TabItem label="cargo add">
-		<Code lang="bash" title="Terminal" code={"cargo add sourcier"} />
+    <TabItem label="cargo add">
+        <Code lang="bash" title="Terminal" code={"cargo add sourcier"} />
 
-		Cargo ajoute la dernière version `2.0` et active les fonctionnalités par défaut.
-	</TabItem>
-	<TabItem label="Cargo.toml">
-		<Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = \"2.0\""} />
-	</TabItem>
+        Cargo ajoute la dernière version `2.0` et active les fonctionnalités par défaut.
+    </TabItem>
+    <TabItem label="Cargo.toml">
+        <Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = \"2.0\""} />
+    </TabItem>
 </Tabs>
 
 Vous ne dépendez jamais que de `sourcier`. Elle ré-exporte toute l'API de la crate moteur `sourcier-core`, qui existe pour que l'implémentation reste petite et la façade stable.
 
 <Aside type="note">
-	Vous préférez une dépendance vivante ? Suivez le dépôt directement :
+    Vous préférez une dépendance vivante ? Suivez le dépôt directement :
 
-	<Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { git = \"https://github.com/elcoosp/sourcier\", branch = \"main\" }"} />
+    <Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { git = \"https://github.com/elcoosp/sourcier\", branch = \"main\" }"} />
 </Aside>
 
 ## Vérifier l'installation
@@ -48,7 +48,7 @@ Toutes les fonctionnalités sauf `parallel` sont activées par défaut et transm
 Cela garde l'index d'offsets de ligne et l'extraction d'octets tout en retirant la sérialisation et les statistiques d'exécution. Voir [Drapeaux de fonctionnalité](/reference/feature-flags/) pour la matrice complète et ce que chaque fonctionnalité conditionne.
 
 <Aside type="caution">
-	Désactiver `view` retire `view`, `view_str`, `position_from_offset`, `offset_from_position` et `display_position`. Le code qui les appelle échoue à compiler jusqu'à ce que vous réactiviez la fonctionnalité.
+    Désactiver `view` retire `view`, `view_str`, `position_from_offset`, `offset_from_position` et `display_position`. Le code qui les appelle échoue à compiler jusqu'à ce que vous réactiviez la fonctionnalité.
 </Aside>
 
 ## Étapes suivantes

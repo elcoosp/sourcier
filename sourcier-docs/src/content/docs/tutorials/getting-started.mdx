@@ -23,13 +23,13 @@ minutes.
 <Steps>
 1. Create a new binary crate and enter it:
 
-	<Code lang="bash" title="Terminal" code={"cargo new span-demo\ncd span-demo"} />
+    <Code lang="bash" title="Terminal" code={"cargo new span-demo\ncd span-demo"} />
 
 2. Add Sourcier as a dependency:
 
-	<Code lang="bash" title="Terminal" code={"cargo add sourcier"} />
+   <Code lang="bash" title="Terminal" code={"cargo add sourcier"} />
 
-	Cargo adds the current `2.0` release to `Cargo.toml`.
+   Cargo adds the current `2.0` release to `Cargo.toml`.
 
 3. Replace the contents of `src/main.rs` with the code from the next step.
 </Steps>
@@ -53,9 +53,9 @@ You see the expected output:
 <Code lang="ansi" code={"registered 2 files"} />
 
 <Aside type="note">
-	`add_file` accepts any `impl AsRef<str>` for the path and
-	`impl Into<Vec<u8>>` for the content, so you can pass `&str` paths and
-	either byte slices or owned buffers.
+    `add_file` accepts any `impl AsRef<str>` for the path and
+    `impl Into<Vec<u8>>` for the content, so you can pass `&str` paths and
+    either byte slices or owned buffers.
 </Aside>
 
 ## Look up files by path and id

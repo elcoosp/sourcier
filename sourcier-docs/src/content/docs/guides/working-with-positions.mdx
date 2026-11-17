@@ -52,9 +52,9 @@ spans can be built and stored in `const` and `static` items:
 <Code lang="rust" code={"use sourcier::RelativePosition;\n\nconst STD_SPAN: RelativePosition = RelativePosition::new(1, 1, 1, 1);"} />
 
 <Aside type="note">
-	`AbsolutePosition::new` is not a `const fn` because it routes the id
-	through the `FileId` trait; use the const `RelativePosition` constructors
-	when you need compile-time packing.
+    `AbsolutePosition::new` is not a `const fn` because it routes the id
+    through the `FileId` trait; use the const `RelativePosition` constructors
+    when you need compile-time packing.
 </Aside>
 
 ## Round-trip through the raw encoding

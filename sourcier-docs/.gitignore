@@ -16,3 +16,4 @@ pnpm-debug.log*
 .qa/
 # playwright
 .playwright/
+ec.config.mjs

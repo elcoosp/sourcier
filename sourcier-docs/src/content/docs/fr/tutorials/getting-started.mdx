@@ -18,13 +18,13 @@ Ce tutoriel vous emmène à travers le chemin doré de Sourcier : enregistrer de
 <Steps>
 1. Créez une nouvelle crate binaire et entrez dedans :
 
-	<Code lang="bash" title="Terminal" code={"cargo new span-demo\ncd span-demo"} />
+    <Code lang="bash" title="Terminal" code={"cargo new span-demo\ncd span-demo"} />
 
 2. Ajoutez Sourcier comme dépendance :
 
-	<Code lang="bash" title="Terminal" code={"cargo add sourcier"} />
+   <Code lang="bash" title="Terminal" code={"cargo add sourcier"} />
 
-	Cargo ajoute la version `2.0` courante à `Cargo.toml`.
+   Cargo ajoute la version `2.0` courante à `Cargo.toml`.
 
 3. Remplacez le contenu de `src/main.rs` par le code de l'étape suivante.
 </Steps>
@@ -46,9 +46,9 @@ Vous voyez la sortie attendue :
 <Code lang="ansi" code={"registered 2 files"} />
 
 <Aside type="note">
-	`add_file` accepte n'importe quel `impl AsRef<str>` pour le chemin et
-	`impl Into<Vec<u8>>` pour le contenu, donc vous pouvez passer des chemins
-	`&str` et soit des tranches d'octets soit des buffers possédés.
+    `add_file` accepte n'importe quel `impl AsRef<str>` pour le chemin et
+    `impl Into<Vec<u8>>` pour le contenu, donc vous pouvez passer des chemins
+    `&str` et soit des tranches d'octets soit des buffers possédés.
 </Aside>
 
 ## Chercher les fichiers par chemin et par id

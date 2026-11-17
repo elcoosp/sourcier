@@ -51,9 +51,9 @@ for diagnostics:
 <Code lang="rust" code={"use sourcier::{MapError, SourceFilesBuilder};\nuse std::path::PathBuf;\n\nlet files = SourceFilesBuilder::<u8>::new()\n    .add_path(PathBuf::from(\"src/main.rs\"), b\"fn main() {}\")\n    .expect(\"utf-8 path\")\n    .finalize()\n    .expect(\"no capacity issue\");\n\nassert_eq!(files.get_id(\"src/main.rs\"), Some(1));"} />
 
 <Aside type="caution">
-	Non-UTF-8 paths cannot be registered losslessly. Convert them at the
-	boundary of your tool and report `MapError::PathNotUtf8` with its `path`
-	field to the user.
+    Non-UTF-8 paths cannot be registered losslessly. Convert them at the
+    boundary of your tool and report `MapError::PathNotUtf8` with its `path`
+    field to the user.
 </Aside>
 
 ## Handle duplicate paths

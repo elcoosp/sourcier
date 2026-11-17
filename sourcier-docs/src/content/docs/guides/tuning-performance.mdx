@@ -40,9 +40,9 @@ default. The opt-in `parallel` feature spreads that scan across cores with
 <Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { version = \"2.0\", features = [\"parallel\"] }"} />
 
 <Aside type="note">
-	On a 2-core reference VM the thread-pool overhead outweighed the scan
-	savings, which is why the feature is opt-in. Enable it on many-core build
-	machines where file sets are large.
+    On a 2-core reference VM the thread-pool overhead outweighed the scan
+    savings, which is why the feature is opt-in. Enable it on many-core build
+    machines where file sets are large.
 </Aside>
 
 ## Trim features for a leaner build

@@ -39,7 +39,7 @@ Retirez l'id de fichier avec `to_relative`, et attachez-en un avec `RelativePosi
 <Code lang="rust" code={"use sourcier::RelativePosition;\n\nconst STD_SPAN: RelativePosition = RelativePosition::new(1, 1, 1, 1);"} />
 
 <Aside type="note">
-	`AbsolutePosition::new` n'est pas une `const fn` parce qu'elle route l'id à travers le trait `FileId` ; utilisez les constructeurs const `RelativePosition` quand vous avez besoin de compaction à la compilation.
+    `AbsolutePosition::new` n'est pas une `const fn` parce qu'elle route l'id à travers le trait `FileId` ; utilisez les constructeurs const `RelativePosition` quand vous avez besoin de compaction à la compilation.
 </Aside>
 
 ## Faire l'aller-retour par l'encodage brut

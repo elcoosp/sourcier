@@ -21,8 +21,8 @@ Erreurs produites pendant la construction ou l'interrogation d'une `SourceFilesM
 | `PathNotUtf8` | `path: String` | `path is not valid UTF-8: {path}` | `add_path` avec un chemin qui n'est pas de l'UTF-8 valide ; le champ porte le rendu avec perte (octets invalides remplacés par `U+FFFD`) |
 
 <Aside type="note">
-	`Finalized` et `AlreadyFinalized` sont non représentables via
-	`SourceFilesBuilder` : le builder à état de type n'expose que l'enregistrement, et `finalize` le consomme. Ils restent atteignables via la map brute.
+    `Finalized` et `AlreadyFinalized` sont non représentables via
+    `SourceFilesBuilder` : le builder à état de type n'expose que l'enregistrement, et `finalize` le consomme. Ils restent atteignables via la map brute.
 </Aside>
 
 ## `PositionError`

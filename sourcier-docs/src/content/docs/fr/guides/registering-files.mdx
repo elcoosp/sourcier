@@ -39,7 +39,7 @@ Les outils qui tiennent des valeurs `Path`/`PathBuf` enregistrent via `add_path`
 <Code lang="rust" code={"use sourcier::{MapError, SourceFilesBuilder};\nuse std::path::PathBuf;\n\nlet files = SourceFilesBuilder::<u8>::new()\n    .add_path(PathBuf::from(\"src/main.rs\"), b\"fn main() {}\")\n    .expect(\"utf-8 path\")\n    .finalize()\n    .expect(\"no capacity issue\");\n\nassert_eq!(files.get_id(\"src/main.rs\"), Some(1));"} />
 
 <Aside type="caution">
-	Les chemins non-UTF-8 ne peuvent pas être enregistrés sans perte. Convertissez-les à la frontière de votre outil et rapportez `MapError::PathNotUtf8` avec son champ `path` à l'utilisateur.
+    Les chemins non-UTF-8 ne peuvent pas être enregistrés sans perte. Convertissez-les à la frontière de votre outil et rapportez `MapError::PathNotUtf8` avec son champ `path` à l'utilisateur.
 </Aside>
 
 ## Gérer les chemins en double

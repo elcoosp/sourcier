@@ -46,7 +46,7 @@ La fonctionnalité `view` indexe les frontières de lignes de chaque fichier ave
 Les offsets de ligne par fichier vivent dans un `Vec<Option<LineOffsets>>` dense indexé par id, donc le chemin chaud de vue ne fait aucun hashing du tout. La fonctionnalité opt-in `parallel` étale le scan sur les cœurs avec `rayon` ; sur la VM de référence à 2 cœurs, le surcoût du pool de threads a dépassé les économies du scan, ce qui explique pourquoi elle n'est pas par défaut.
 
 <Aside type="note">
-	Les pistes de benchmark `builder/*`, `position_from_offset/*` et `offset_from_position/*` épinglent le coût des ajouts de la 2.0 ; les pistes d'origine `finalize`, `get_id`, `view` et `line_offsets` sont inchangées.
+    Les pistes de benchmark `builder/*`, `position_from_offset/*` et `offset_from_position/*` épinglent le coût des ajouts de la 2.0 ; les pistes d'origine `finalize`, `get_id`, `view` et `line_offsets` sont inchangées.
 </Aside>
 
 ## Le format filaire porte des données, pas d'état dérivé

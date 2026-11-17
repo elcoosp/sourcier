@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://sourcier.vercel.app/sitemap-index.xml

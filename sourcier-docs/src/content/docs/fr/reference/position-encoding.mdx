@@ -65,7 +65,7 @@ Compatibilité ascendante :
 `AbsolutePosition`, `RelativePosition` et `FeedbackSnapshot` se sérialisent sous leurs formes brutes avec la fonctionnalité par défaut `serde`, et les allers-retours préservent les bits exactement.
 
 <Aside type="caution">
-	Les valeurs brutes `u64` sont sûres à persister seulement à l'intérieur d'une ligne de version compatible semver de l'encodage. Le layout est documenté et stable, mais une version majeure peut le redéfinir ; re-dérivez les valeurs brutes à travers les montées majeures.
+    Les valeurs brutes `u64` sont sûres à persister seulement à l'intérieur d'une ligne de version compatible semver de l'encodage. Le layout est documenté et stable, mais une version majeure peut le redéfinir ; re-dérivez les valeurs brutes à travers les montées majeures.
 </Aside>
 
 ## Étapes suivantes

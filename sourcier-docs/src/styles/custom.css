@@ -13,29 +13,29 @@
  */
 
 :root {
-        --sl-color-accent-low: hsl(230 40% 93%);
-        --sl-color-accent: hsl(230 40% 35%);
-        --sl-color-accent-high: hsl(230 40% 28%);
+  --sl-color-accent-low: hsl(230 40% 93%);
+  --sl-color-accent: hsl(230 40% 35%);
+  --sl-color-accent-high: hsl(230 40% 28%);
 }
 
-[data-theme="dark"] {
-        --sl-color-accent-low: hsl(230 40% 16%);
-        --sl-color-accent: hsl(230 40% 60%);
-        --sl-color-accent-high: hsl(230 40% 75%);
+[data-theme='dark'] {
+  --sl-color-accent-low: hsl(230 40% 16%);
+  --sl-color-accent: hsl(230 40% 60%);
+  --sl-color-accent-high: hsl(230 40% 75%);
 }
 
 /* Wide reference tables (API signatures) scroll inside the content column
  * instead of overflowing the page on narrow viewports. */
 .sl-markdown-content table {
-        display: block;
-        max-width: 100%;
-        overflow-x: auto;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 /* Long Rust signatures inside table cells wrap at any character. */
 .sl-markdown-content td code,
 .sl-markdown-content th code {
-        overflow-wrap: anywhere;
+  overflow-wrap: anywhere;
 }
 
 /* On narrow viewports the heading anchor's reserved padding-right can push
@@ -44,13 +44,13 @@
  * reservation on small screens; the anchor icon only reveals on hover or
  * keyboard focus. */
 @media (max-width: 640px) {
-        .sl-heading-wrapper :is(h2, h3, h4, h5, h6) {
-                padding-right: 0;
-        }
+  .sl-heading-wrapper :is(h2, h3, h4, h5, h6) {
+    padding-right: 0;
+  }
 }
 
 /* Keep the logo crisp in the header at its natural vector size. */
 main .hero img,
 main img {
-        image-rendering: auto;
+  image-rendering: auto;
 }

@@ -24,9 +24,9 @@ Errors produced while building or querying a
 | `PathNotUtf8` | `path: String` | `path is not valid UTF-8: {path}` | `add_path` with a path that is not valid UTF-8; the field carries the lossy rendering (invalid bytes replaced by `U+FFFD`) |
 
 <Aside type="note">
-	`Finalized` and `AlreadyFinalized` are unrepresentable through
-	`SourceFilesBuilder`: the type-state builder only exposes registration,
-	and `finalize` consumes it. They remain reachable through the raw map.
+    `Finalized` and `AlreadyFinalized` are unrepresentable through
+    `SourceFilesBuilder`: the type-state builder only exposes registration,
+    and `finalize` consumes it. They remain reachable through the raw map.
 </Aside>
 
 ## `PositionError`

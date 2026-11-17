@@ -40,7 +40,7 @@ Tout activer, y compris le parallélisme :
 <Code lang="toml" title="Cargo.toml" code={"[dependencies]\nsourcier = { version = \"2.0\", features = [\"parallel\"] }"} />
 
 <Aside type="caution">
-	Désactiver une fonctionnalité retire ses API de la crate compilée : du code qui appelle `view` avec `default-features = false` échoue à compiler. Cargo unifie les fonctionnalités à travers votre graphe de dépendances, donc une autre crate de l'arbre peut réactiver une fonctionnalité que vous avez retirée.
+    Désactiver une fonctionnalité retire ses API de la crate compilée : du code qui appelle `view` avec `default-features = false` échoue à compiler. Cargo unifie les fonctionnalités à travers votre graphe de dépendances, donc une autre crate de l'arbre peut réactiver une fonctionnalité que vous avez retirée.
 </Aside>
 
 ## MSRV par configuration

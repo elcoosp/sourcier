@@ -29,10 +29,10 @@ The variants and when they occur:
 | `PathNotUtf8` | `path: String` | `add_path` receives a path that is not valid UTF-8 |
 
 <Aside type="tip">
-	`SourceFilesBuilder` exposes only the registration API and `finalize`
-	consumes it, so `MapError::Finalized` and `MapError::AlreadyFinalized`
-	cannot be produced through the builder. They remain reachable through the
-	raw `SourceFilesMap`, which keeps its phase errors at runtime.
+    `SourceFilesBuilder` exposes only the registration API and `finalize`
+    consumes it, so `MapError::Finalized` and `MapError::AlreadyFinalized`
+    cannot be produced through the builder. They remain reachable through the
+    raw `SourceFilesMap`, which keeps its phase errors at runtime.
 </Aside>
 
 ## Handle checked position failures
