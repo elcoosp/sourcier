@@ -12,11 +12,11 @@ Utilisez ce guide pour transformer des positions en octets source et naviguer le
 
 `view` renvoie les octets exacts qu'une position couvre, y compris les spans multi-lignes et les terminateurs de ligne qu'ils contiennent :
 
-<Code lang="rust" code={"use sourcier::{AbsolutePosition, SourceFilePosition, SourceFilesMap};\n\nlet mut files = SourceFilesMap::<u8>::new();\nfiles\n    .add_file(\"src/main.rs\", b\"fn main() {\\\\n    println!(\\\\\"Hello\\\\\");\\\\n}\")\n    .expect(\"capacity available\");\nfiles.finalize().expect(\"no capacity issue\");\n\nlet id = files.get_id(\"src/main.rs\").expect(\"file present\");\nlet pos = AbsolutePosition::new(id, 2, 5, 2, 22);\n\nassert_eq!(files.view(id, &pos), Some(&b\"println!(\\\\\"Hello\\\\\");\"[..]));"} />
+<Code lang="rust" code={"use sourcier::{AbsolutePosition, SourceFilePosition, SourceFilesMap};\n\nlet mut files = SourceFilesMap::<u8>::new();\nfiles\n    .add_file(\"src/main.rs\", b\"fn main() {\\\\n    println!(\\\"Hello\\\");\\\\n}\")\n    .expect(\"capacity available\");\nfiles.finalize().expect(\"no capacity issue\");\n\nlet id = files.get_id(\"src/main.rs\").expect(\"file present\");\nlet pos = AbsolutePosition::new(id, 2, 5, 2, 22);\n\nassert_eq!(files.view(id, &pos), Some(&b\"println!(\\\"Hello\\\");\"[..]));"} />
 
 Pour de la source UTF-8, `view_str` renvoie un `&str` à la place et donne `None` quand le span couperait un caractère multi-octets :
 
-<Code lang="rust" code={"let text = files.view_str(id, &pos).expect(\"utf-8 span\");\nassert_eq!(text, \"println!(\\\\\"Hello\\\\\");\");"} />
+<Code lang="rust" code={"let text = files.view_str(id, &pos).expect(\"utf-8 span\");\nassert_eq!(text, \"println!(\\\"Hello\\\");\");"} />
 
 `view` gère aussi les spans de largeur nulle, qui se résolvent vers la tranche vide au point demandé.
 

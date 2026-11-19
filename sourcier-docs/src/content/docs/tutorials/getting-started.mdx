@@ -42,7 +42,7 @@ one-based ids.
 
 Add this code to `src/main.rs`:
 
-<Code lang="rust" title="src/main.rs" code={"use sourcier::SourceFilesMap;\n\nfn main() {\n    // u8 ids support up to 255 files; u16 supports 65,535.\n    let mut files = SourceFilesMap::<u8>::new();\n\n    files\n        .add_file(\"src/main.rs\", b\"fn main() {\\\\n    println!(\\\\\"Hello\\\\\");\\\\n}\")\n        .expect(\"capacity available\");\n    files\n        .add_file(\"src/lib.rs\", b\"pub mod utils;\")\n        .expect(\"capacity available\");\n\n    // Sorts by path, deduplicates, assigns one-based ids.\n    files.finalize().expect(\"no capacity issue\");\n\n    println!(\"registered {} files\", files.len());\n}"} />
+<Code lang="rust" title="src/main.rs" code={"use sourcier::SourceFilesMap;\n\nfn main() {\n    // u8 ids support up to 255 files; u16 supports 65,535.\n    let mut files = SourceFilesMap::<u8>::new();\n\n    files\n        .add_file(\"src/main.rs\", b\"fn main() {\\\\n    println!(\\\"Hello\\\");\\\\n}\")\n        .expect(\"capacity available\");\n    files\n        .add_file(\"src/lib.rs\", b\"pub mod utils;\")\n        .expect(\"capacity available\");\n\n    // Sorts by path, deduplicates, assigns one-based ids.\n    files.finalize().expect(\"no capacity issue\");\n\n    println!(\"registered {} files\", files.len());\n}"} />
 
 Run the program:
 
@@ -87,7 +87,7 @@ region:
 With the default `view` feature, the map bridges positions back to the bytes
 they cover:
 
-<Code lang="rust" code={"assert_eq!(\n    files.view(id, &pos),\n    Some(&b\"println!(\\\\\"Hello\\\\\");\"[..])\n);"} />
+<Code lang="rust" code={"assert_eq!(\n    files.view(id, &pos),\n    Some(&b\"println!(\\\"Hello\\\");\"[..])\n);"} />
 
 `view` returns the bytes of the span including any line terminators it
 covers. For UTF-8 source you can use `view_str`, which returns `&str` and

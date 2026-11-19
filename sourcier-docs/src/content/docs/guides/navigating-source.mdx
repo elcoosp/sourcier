@@ -14,12 +14,12 @@ byte-accurately. Everything on this page requires the default `view` feature.
 `view` returns the exact bytes a position covers, including multi-line spans
 and the line terminators inside them:
 
-<Code lang="rust" code={"use sourcier::{AbsolutePosition, SourceFilePosition, SourceFilesMap};\n\nlet mut files = SourceFilesMap::<u8>::new();\nfiles\n    .add_file(\"src/main.rs\", b\"fn main() {\\\\n    println!(\\\\\"Hello\\\\\");\\\\n}\")\n    .expect(\"capacity available\");\nfiles.finalize().expect(\"no capacity issue\");\n\nlet id = files.get_id(\"src/main.rs\").expect(\"file present\");\nlet pos = AbsolutePosition::new(id, 2, 5, 2, 22);\n\nassert_eq!(files.view(id, &pos), Some(&b\"println!(\\\\\"Hello\\\\\");\"[..]));"} />
+<Code lang="rust" code={"use sourcier::{AbsolutePosition, SourceFilePosition, SourceFilesMap};\n\nlet mut files = SourceFilesMap::<u8>::new();\nfiles\n    .add_file(\"src/main.rs\", b\"fn main() {\\\\n    println!(\\\"Hello\\\");\\\\n}\")\n    .expect(\"capacity available\");\nfiles.finalize().expect(\"no capacity issue\");\n\nlet id = files.get_id(\"src/main.rs\").expect(\"file present\");\nlet pos = AbsolutePosition::new(id, 2, 5, 2, 22);\n\nassert_eq!(files.view(id, &pos), Some(&b\"println!(\\\"Hello\\\");\"[..]));"} />
 
 For UTF-8 source, `view_str` returns a `&str` instead and yields `None` when
 the span would cut a multi-byte character:
 
-<Code lang="rust" code={"let text = files.view_str(id, &pos).expect(\"utf-8 span\");\nassert_eq!(text, \"println!(\\\\\"Hello\\\\\");\");"} />
+<Code lang="rust" code={"let text = files.view_str(id, &pos).expect(\"utf-8 span\");\nassert_eq!(text, \"println!(\\\"Hello\\\");\");"} />
 
 `view` also handles zero-width spans, which resolve to the empty slice at the
 requested point.

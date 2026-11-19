@@ -23,7 +23,7 @@ if (await burger.count()) {
   console.log('hamburger clicked:', JSON.stringify(sidebarVisible));
   if (sidebarVisible.panelDisplay === 'none')
     failures.push('mobile sidebar did not open after hamburger click');
-  const shot = await mob.screenshot({ path: '.qa/screenshots/manual-hamburger-mobile.png' });
+  await mob.screenshot({ path: '.qa/screenshots/manual-hamburger-mobile.png' });
   console.log('hamburger screenshot saved');
 } else {
   failures.push('no hamburger button found');
@@ -37,7 +37,7 @@ await desk.evaluate(() => document.fonts.ready);
 // Open search with Ctrl+K (Starlight default shortcut)
 await desk.keyboard.press('ControlOrMeta+k');
 await desk.waitForTimeout(600);
-let dialog = desk.locator('dialog[open], starlight-search-modal[open], .search-modal');
+const dialog = desk.locator('dialog[open], starlight-search-modal[open], .search-modal');
 let dialogCount = await dialog.count();
 if (!dialogCount) {
   // fall back: click the search button in the header
