@@ -25,7 +25,7 @@ default = ["serde", "view", "rt-feedback"]
 memchr = "2.7"
 rayon = { version = "1.10", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
-thiserror = "2.0"
+thiserror = { workspace = true }
 
 [dev-dependencies]
 insta = { version = "1.43", features = ["yaml", "redactions"] }
