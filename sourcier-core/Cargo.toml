@@ -22,16 +22,16 @@ parallel = ["dep:rayon"]
 default = ["serde", "view", "rt-feedback"]
 
 [dependencies]
-memchr = "2.7"
-rayon = { version = "1.10", optional = true }
-serde = { version = "1.0", features = ["derive"], optional = true }
+memchr = { workspace = true }
+rayon = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.43", features = ["yaml", "redactions"] }
-proptest = "1.9"
+insta = { workspace = true, features = ["yaml", "redactions"] }
+proptest = { workspace = true }
 criterion = { version = "0.8", features = ["html_reports"] }
-serde_json = "1.0"
+serde_json = { workspace = true }
 
 [[bench]]
 name = "map"
